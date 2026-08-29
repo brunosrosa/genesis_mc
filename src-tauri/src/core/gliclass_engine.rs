@@ -64,9 +64,8 @@ impl OrtScorerEngine {
 
     /// Inicializa a instância singleton procurando os artefatos físicos.
     fn init_singleton() -> Self {
-        let models_dir = crate::core::gigatoken_encoder::GigaTokenEncoder::resolve_models_dir();
-        let onnx_path = models_dir.join("gliclass_multilang.onnx");
-        let tokenizer_path = models_dir.join("tokenizer.json");
+        let onnx_path = crate::core::ort_scorer::resolve_gliclass_model_path();
+        let tokenizer_path = crate::core::ort_scorer::resolve_tokenizer_path();
 
         let exists = onnx_path.exists() && tokenizer_path.exists();
 

@@ -122,13 +122,14 @@ pub fn determine_model_tier(model_name: &str, file_size_mb: f64) -> ModelTier {
     let lower = model_name.to_lowercase();
     if lower.contains("dspark") || lower.contains("dflash") || lower.contains("draft") {
         ModelTier::Tier4Drafter
-    } else if lower.contains("135m") || lower.contains("360m") || lower.contains("gliclass") || file_size_mb < 600.0 {
+    } else if lower.contains("135m") || lower.contains("360m") || lower.contains("k1") || lower.contains("gliclass") || file_size_mb < 600.0 {
         ModelTier::Tier0Bootstrap
-    } else if (lower.contains("gemma") && (lower.contains("e2b") || lower.contains("2b"))) || (lower.contains("qwen") && lower.contains("1.5b")) {
+    } else if lower.contains("790m") || lower.contains("1.5b") || lower.contains("1.2b") || lower.contains("1b") || (lower.contains("gemma") && lower.contains("e2b") && file_size_mb <= 1800.0) || file_size_mb <= 1800.0 {
         ModelTier::Tier05Epistemic
-    } else if lower.contains("27b") || lower.contains("33b") || lower.contains("moe") || lower.contains("laguna") || lower.contains("7b") || lower.contains("8b") || lower.contains("14b") || file_size_mb > 5000.0 {
+    } else if lower.contains("27b") || lower.contains("33b") || lower.contains("moe") || lower.contains("laguna") || lower.contains("14b") || file_size_mb > 4500.0 {
         ModelTier::Tier2Background
     } else {
+        // Modelos 2B a 8B (Qwen 3.5 4B, Gemma 4 E2B, Phi-4-mini, Nemotron-4B, Fara-7B, Falcon3-Mamba-7B, Mamba-Codestral-7B, zamba2-2.7b)
         ModelTier::Tier1Master
     }
 }
@@ -937,7 +938,9 @@ async fn profile_single_model_pass(
         }
     }
 
-    let (engine_selected, engine): (String, std::sync::Arc<dyn EphemeralInferEngine>) = if force_cpu {
+    let (engine_selected, engine): (String, std::sync::Arc<dyn EphemeralInferEngine>) = if engine_id == "ort_scorer" || model_path_str.to_lowercase().ends_with(".onnx") {
+        ("ort_scorer".to_string(), std::sync::Arc::new(souls_mc_lib::core::ort_scorer::OrtScorerEngine::new()))
+    } else if force_cpu {
         #[cfg(any(feature = "ik_llama_backend", feature = "llama_backend"))]
         {
             ("llama_cpp4".to_string(), std::sync::Arc::new(LlamaCppEngine))
@@ -1102,6 +1105,36 @@ async fn profile_single_model_pass(
     }
 }
 
+/// Coleta todos os modelos da Arena (diretório primário + diretórios locais do projeto)
+fn collect_all_arena_models(conn: &Connection, primary_dir: &Path) -> Vec<PathBuf> {
+    let root = resolve_root_dir();
+    let local_dirs = [
+        root.join("src-tauri").join("models"),
+        root.join("models"),
+        root.join(".souls_data").join("models"),
+    ];
+
+    let _ = model_registry::sync_local_models_to_registry(conn, primary_dir);
+    for d in &local_dirs {
+        if d.exists() && d != primary_dir {
+            let _ = model_registry::sync_local_models_to_registry(conn, d);
+        }
+    }
+
+    let mut all_models = model_registry::collect_local_models(primary_dir);
+    for d in &local_dirs {
+        if d.exists() && d != primary_dir {
+            let additional = model_registry::collect_local_models(d);
+            for m in additional {
+                if !all_models.contains(&m) {
+                    all_models.push(m);
+                }
+            }
+        }
+    }
+    all_models
+}
+
 /// Tier 1: Hardware & Sanity Profiling (TTFT, TPOT, TPS, VRAM, KV Cache, CPU vs GPU)
 async fn run_mode_profile(
     conn: &Connection,
@@ -1110,8 +1143,7 @@ async fn run_mode_profile(
     json_mode: bool,
 ) -> Result<Vec<ModelProfileResult>, Box<dyn std::error::Error>> {
     let _thermal_rx = souls_thermal_governor::spawn_thermal_governor();
-    let _ = model_registry::sync_local_models_to_registry(conn, models_dir);
-    let mut models = model_registry::collect_local_models(models_dir);
+    let mut models = collect_all_arena_models(conn, models_dir);
 
     if let Some(filter) = model_filter {
         let lower = filter.to_lowercase();
@@ -1125,7 +1157,7 @@ async fn run_mode_profile(
 
     if models.is_empty() {
         if !json_mode {
-            println!("[!] Nenhum modelo GGUF encontrado em {}", models_dir.display());
+            println!("[!] Nenhum modelo encontrado em {}", models_dir.display());
         }
         return Ok(Vec::new());
     }
@@ -1176,12 +1208,16 @@ async fn run_mode_profile(
             let candidate_probes = cascade.probe_candidate_engines(m, &tf);
             let mut gpu_engines = Vec::new();
             for (eng, _) in &candidate_probes {
-                if (eng == "ik_llama_vanguard" || eng == "llama_upstream" || eng == "mistral_rs") && !gpu_engines.contains(&eng.as_str()) {
+                if (eng == "ik_llama_vanguard" || eng == "llama_upstream" || eng == "mistral_rs" || eng == "ort_scorer") && !gpu_engines.contains(&eng.as_str()) {
                     gpu_engines.push(eng.as_str());
                 }
             }
             if gpu_engines.is_empty() {
-                gpu_engines.push("ik_llama_vanguard");
+                if name.to_lowercase().ends_with(".onnx") {
+                    gpu_engines.push("ort_scorer");
+                } else {
+                    gpu_engines.push("ik_llama_vanguard");
+                }
             }
 
             for eng in gpu_engines {
@@ -1223,12 +1259,16 @@ async fn run_mode_profile(
             let candidate_probes = cascade.probe_candidate_engines(m, &tf);
             let mut gpu_engines = Vec::new();
             for (eng, _) in &candidate_probes {
-                if (eng == "ik_llama_vanguard" || eng == "llama_upstream" || eng == "mistral_rs") && !gpu_engines.contains(&eng.as_str()) {
+                if (eng == "ik_llama_vanguard" || eng == "llama_upstream" || eng == "mistral_rs" || eng == "ort_scorer") && !gpu_engines.contains(&eng.as_str()) {
                     gpu_engines.push(eng.as_str());
                 }
             }
             if gpu_engines.is_empty() {
-                gpu_engines.push("ik_llama_vanguard");
+                if name.to_lowercase().ends_with(".onnx") {
+                    gpu_engines.push("ort_scorer");
+                } else {
+                    gpu_engines.push("ik_llama_vanguard");
+                }
             }
 
             for eng in gpu_engines {
@@ -1270,12 +1310,16 @@ async fn run_mode_profile(
             let candidate_probes = cascade.probe_candidate_engines(m, &tf);
             let mut engines_to_run = Vec::new();
             for (eng, _) in &candidate_probes {
-                if (eng == "ik_llama_vanguard" || eng == "llama_upstream" || eng == "mistral_rs") && !engines_to_run.contains(&eng.as_str()) {
+                if (eng == "ik_llama_vanguard" || eng == "llama_upstream" || eng == "mistral_rs" || eng == "ort_scorer") && !engines_to_run.contains(&eng.as_str()) {
                     engines_to_run.push(eng.as_str());
                 }
             }
             if engines_to_run.is_empty() {
-                engines_to_run.push("ik_llama_vanguard");
+                if name.to_lowercase().ends_with(".onnx") {
+                    engines_to_run.push("ort_scorer");
+                } else {
+                    engines_to_run.push("ik_llama_vanguard");
+                }
             }
 
             for eng in engines_to_run {
@@ -1306,12 +1350,16 @@ async fn run_mode_profile(
             let candidate_probes = cascade.probe_candidate_engines(m, &tf);
             let mut engines_to_run = Vec::new();
             for (eng, _) in &candidate_probes {
-                if (eng == "ik_llama_vanguard" || eng == "llama_upstream" || eng == "mistral_rs") && !engines_to_run.contains(&eng.as_str()) {
+                if (eng == "ik_llama_vanguard" || eng == "llama_upstream" || eng == "mistral_rs" || eng == "ort_scorer") && !engines_to_run.contains(&eng.as_str()) {
                     engines_to_run.push(eng.as_str());
                 }
             }
             if engines_to_run.is_empty() {
-                engines_to_run.push("ik_llama_vanguard");
+                if name.to_lowercase().ends_with(".onnx") {
+                    engines_to_run.push("ort_scorer");
+                } else {
+                    engines_to_run.push("ik_llama_vanguard");
+                }
             }
 
             for eng in engines_to_run {
@@ -1376,7 +1424,7 @@ async fn run_mode_eval(
         println!("  Prompts carregados: {} casos", prompts.len());
     }
 
-    let mut models = model_registry::collect_local_models(models_dir);
+    let mut models = collect_all_arena_models(conn, models_dir);
     if let Some(filter) = model_filter {
         let lower = filter.to_lowercase();
         models.retain(|p| {
@@ -1583,7 +1631,7 @@ async fn run_mode_vision(
         println!("============================================================");
     }
 
-    let mut models = model_registry::collect_local_models(models_dir);
+    let mut models = collect_all_arena_models(conn, models_dir);
     if let Some(filter) = model_filter {
         let lower = filter.to_lowercase();
         models.retain(|p| {
@@ -1659,7 +1707,7 @@ async fn run_mode_speculative(
         println!("============================================================");
     }
 
-    let mut models = model_registry::collect_local_models(models_dir);
+    let mut models = collect_all_arena_models(conn, models_dir);
     if let Some(filter) = model_filter {
         let lower = filter.to_lowercase();
         models.retain(|p| {
@@ -1751,7 +1799,7 @@ async fn run_mode_pressure(
         println!("============================================================");
     }
 
-    let mut models = model_registry::collect_local_models(models_dir);
+    let mut models = collect_all_arena_models(conn, models_dir);
     if let Some(filter) = model_filter {
         let lower = filter.to_lowercase();
         models.retain(|p| {

@@ -1166,6 +1166,59 @@ pub fn sync_local_models_to_registry(conn: &Connection, models_dir: &Path) -> Re
                             tracing::error!("Falha ao registrar modelo no SQLite: {e}");
                         }
                     }
+                } else if ext.to_string_lossy().to_lowercase() == "onnx" {
+                    let filename = path
+                        .file_name()
+                        .map(|n| n.to_string_lossy().to_lowercase())
+                        .unwrap_or_default();
+
+                    if filename.ends_with(".onnx") && !filename.ends_with(".onnx.data") {
+                        let path_str = path.to_string_lossy().to_string();
+                        scanned_paths.push(path_str.clone());
+                        let file_size_bytes = fs::metadata(path).map(|m| m.len() as i64).unwrap_or(0);
+                        let model_name = path.file_stem().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "onnx_model".to_string());
+
+                        let _ = conn.execute(
+                            "INSERT INTO model_registry (file_path, model_name, family, parameters, context_length, quantization, capabilities, file_size_bytes, is_active, module_type, engine_type, topology_json, last_seen)
+                             VALUES (?1, ?2, 'gliclass', '300M', 2048, 'ONNX-F16', '[\"classification\",\"risk_scoring\"]', ?3, 1, 'PRIMARY_LLM', 'ort_scorer', '{}', DATETIME('now'))
+                             ON CONFLICT(file_path) DO UPDATE SET
+                                model_name=excluded.model_name,
+                                family=excluded.family,
+                                parameters=excluded.parameters,
+                                context_length=excluded.context_length,
+                                quantization=excluded.quantization,
+                                capabilities=excluded.capabilities,
+                                file_size_bytes=excluded.file_size_bytes,
+                                is_active=1,
+                                module_type='PRIMARY_LLM',
+                                engine_type='ort_scorer',
+                                last_seen=DATETIME('now');",
+                            params![path_str, model_name, file_size_bytes],
+                        );
+                    }
+                } else if ext.to_string_lossy().to_lowercase() == "safetensors" || ext.to_string_lossy().to_lowercase() == "bin" {
+                    let filename = path
+                        .file_name()
+                        .map(|n| n.to_string_lossy().to_lowercase())
+                        .unwrap_or_default();
+                    if !filename.contains("adapter") {
+                        let path_str = path.to_string_lossy().to_string();
+                        scanned_paths.push(path_str.clone());
+                        let file_size_bytes = fs::metadata(path).map(|m| m.len() as i64).unwrap_or(0);
+                        let model_name = path.file_stem().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "safetensors_model".to_string());
+
+                        let _ = conn.execute(
+                            "INSERT INTO model_registry (file_path, model_name, family, parameters, context_length, quantization, capabilities, file_size_bytes, is_active, module_type, engine_type, topology_json, last_seen)
+                             VALUES (?1, ?2, 'safetensors', 'unknown', 4096, 'F16', '[\"general\"]', ?3, 1, 'PRIMARY_LLM', 'mistral_rs', '{}', DATETIME('now'))
+                             ON CONFLICT(file_path) DO UPDATE SET
+                                model_name=excluded.model_name,
+                                file_size_bytes=excluded.file_size_bytes,
+                                is_active=1,
+                                engine_type='mistral_rs',
+                                last_seen=DATETIME('now');",
+                            params![path_str, model_name, file_size_bytes],
+                        );
+                    }
                 }
             }
         }
@@ -1312,14 +1365,17 @@ pub fn collect_local_models(models_dir: &Path) -> Vec<PathBuf> {
         let path = entry.path();
         if path.is_file() {
             if let Some(ext) = path.extension() {
-                if ext.to_string_lossy().to_lowercase() == "gguf" {
-                    let filename = path
-                        .file_name()
-                        .map(|n| n.to_string_lossy().to_lowercase())
-                        .unwrap_or_default();
-                    if filename.contains("mmproj") {
-                        continue;
-                    }
+                let ext_lower = ext.to_string_lossy().to_lowercase();
+                let filename = path
+                    .file_name()
+                    .map(|n| n.to_string_lossy().to_lowercase())
+                    .unwrap_or_default();
+
+                if filename.contains("mmproj") {
+                    continue;
+                }
+
+                if ext_lower == "gguf" {
                     if let Some(meta) = parse_gguf_metadata_zero_copy(path) {
                         if meta.family.trim().to_lowercase() == "clip" {
                             continue;
@@ -1328,6 +1384,14 @@ pub fn collect_local_models(models_dir: &Path) -> Vec<PathBuf> {
                             files.push(path.to_path_buf());
                         }
                     } else if infer_module_type(&filename, "") == "PRIMARY_LLM" {
+                        files.push(path.to_path_buf());
+                    }
+                } else if ext_lower == "onnx" {
+                    if filename.ends_with(".onnx") && !filename.ends_with(".onnx.data") {
+                        files.push(path.to_path_buf());
+                    }
+                } else if ext_lower == "safetensors" || ext_lower == "bin" {
+                    if !filename.contains("adapter") {
                         files.push(path.to_path_buf());
                     }
                 }

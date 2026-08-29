@@ -176,7 +176,7 @@ pub struct MistralRsSidecarProbe;
 
 impl EngineProbe for MistralRsSidecarProbe {
     fn engine_id(&self) -> &'static str {
-        "mistral_rs_sidecar"
+        "mistral_rs"
     }
 
     fn probe_support(&self, model_path: &Path, topology: &TopologyFeatures) -> EngineSupportLevel {

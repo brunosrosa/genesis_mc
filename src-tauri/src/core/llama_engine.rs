@@ -140,9 +140,16 @@ fn build_chat_prompt(system: &str, few_shot: &[(String, String)], user_query: &s
 }
 
 pub fn calculate_kv_cache_v_type(n_embd_head_v: u32) -> KvCacheType {
+    calculate_kv_cache_v_type_with_mode(n_embd_head_v, false)
+}
+
+pub fn calculate_kv_cache_v_type_with_mode(n_embd_head_v: u32, ultra_compress: bool) -> KvCacheType {
     if n_embd_head_v == 0 {
         // Sem garantia de metadados -> F16 universal blindado contra qualquer GGML_ASSERT
         KvCacheType::F16
+    } else if ultra_compress && n_embd_head_v >= 32 && n_embd_head_v.is_multiple_of(32) {
+        // TurboQuant Ultra (< Q4): TQ2 (2-bit IQ2_XXS) para compressão extrema de VRAM
+        KvCacheType::TQ2
     } else if n_embd_head_v >= 256 && n_embd_head_v.is_multiple_of(256) {
         KvCacheType::Q4_K
     } else if n_embd_head_v >= 32 && n_embd_head_v.is_multiple_of(32) {

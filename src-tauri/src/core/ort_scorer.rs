@@ -76,6 +76,10 @@ pub struct SoulsIntentScores {
 /// Resolve o caminho canônico para o modelo GLiClass ONNX.
 pub fn resolve_gliclass_model_path() -> PathBuf {
     let candidates = [
+        "src-tauri/models/GLiClass_Multilang_Ultra/gliclass_multilang.onnx",
+        "models/GLiClass_Multilang_Ultra/gliclass_multilang.onnx",
+        "../models/GLiClass_Multilang_Ultra/gliclass_multilang.onnx",
+        "Z:/souls_mc/src-tauri/models/GLiClass_Multilang_Ultra/gliclass_multilang.onnx",
         "src-tauri/resources/classifiers/gliclass_multilang.onnx",
         "resources/classifiers/gliclass_multilang.onnx",
         "src-tauri/resources/models/gliclass-multilang-ultra.onnx",
@@ -94,12 +98,16 @@ pub fn resolve_gliclass_model_path() -> PathBuf {
             return p;
         }
     }
-    PathBuf::from("src-tauri/models/gliclass_multilang.onnx")
+    PathBuf::from("src-tauri/models/GLiClass_Multilang_Ultra/gliclass_multilang.onnx")
 }
 
 /// Resolve o caminho canônico para o tokenizer do modelo.
 pub fn resolve_tokenizer_path() -> PathBuf {
     let candidates = [
+        "src-tauri/models/GLiClass_Multilang_Ultra/tokenizer.json",
+        "models/GLiClass_Multilang_Ultra/tokenizer.json",
+        "../models/GLiClass_Multilang_Ultra/tokenizer.json",
+        "Z:/souls_mc/src-tauri/models/GLiClass_Multilang_Ultra/tokenizer.json",
         "src-tauri/resources/classifiers/tokenizer.json",
         "resources/classifiers/tokenizer.json",
         "src-tauri/resources/models/tokenizer.json",
@@ -117,7 +125,7 @@ pub fn resolve_tokenizer_path() -> PathBuf {
             return p;
         }
     }
-    PathBuf::from("src-tauri/models/tokenizer.json")
+    PathBuf::from("src-tauri/models/GLiClass_Multilang_Ultra/tokenizer.json")
 }
 
 fn get_tokenizer() -> Option<&'static Tokenizer> {
