@@ -1,3 +1,5 @@
+use std::path::Path;
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Instant;
 use tokio::sync::watch;
 use crate::souls_thermal_governor::SystemState;
@@ -8,10 +10,19 @@ use crate::core::inference_adapter::{
 
 #[cfg(feature = "mistral_backend")]
 use mistralrs::{
-    GgufModelBuilder, TextMessageRole, TextMessages,
+    GgufModelBuilder, TextModelBuilder, TextMessageRole, TextMessages, IsqType, Model,
+    PagedAttentionConfig, MemoryGpuConfig, PagedCacheType,
 };
 
 pub struct MistralRsEngine;
+
+#[cfg(feature = "mistral_backend")]
+static MISTRAL_PIPELINE_CACHE: OnceLock<Mutex<Option<(String, Arc<Model>)>>> = OnceLock::new();
+
+#[cfg(feature = "mistral_backend")]
+fn get_mistral_cache() -> &'static Mutex<Option<(String, Arc<Model>)>> {
+    MISTRAL_PIPELINE_CACHE.get_or_init(|| Mutex::new(None))
+}
 
 #[cfg(feature = "mistral_backend")]
 impl EphemeralInferEngine for MistralRsEngine {
@@ -27,8 +38,7 @@ impl EphemeralInferEngine for MistralRsEngine {
         }
 
         let start_time = Instant::now();
-
-        let model_path = std::path::Path::new(&req.model_path);
+        let model_path = Path::new(&req.model_path);
         if !model_path.exists() {
             return Err(InferenceError::ModelNotFound(req.model_path.clone()));
         }
@@ -45,13 +55,64 @@ impl EphemeralInferEngine for MistralRsEngine {
                 .map_err(|e| InferenceError::ExecutionError(format!("Falha ao criar runtime Tokio: {}", e)))?;
 
             rt.block_on(async {
-                let model = GgufModelBuilder::new(
-                    parent_dir.to_string_lossy().to_string(),
-                    vec![filename],
-                )
-                .build()
-                .await
-                .map_err(|e| InferenceError::ExecutionError(format!("Falha ao carregar modelo Mistral GGUF: {}", e)))?;
+                let is_safetensors = filename.to_lowercase().ends_with(".safetensors") || filename.to_lowercase().ends_with(".bin");
+                let cache_key = format!("{}:{}", req.model_path, if is_safetensors { "safetensors" } else { "gguf" });
+
+                // FastSwitch Pipeline Cache Check
+                let model = {
+                    let cache_lock = get_mistral_cache();
+                    let mut lock = cache_lock.lock().map_err(|_| InferenceError::ExecutionError("Lock poisoned".to_string()))?;
+                    if let Some((ref cached_key, ref cached_model)) = *lock {
+                        if cached_key == &cache_key {
+                            Some(cached_model.clone())
+                        } else {
+                            *lock = None; // FastSwitch purga atômica do modelo anterior
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                };
+
+                let model = match model {
+                    Some(m) => m,
+                    None => {
+                        let paged_cfg = PagedAttentionConfig::new(
+                            Some(32),
+                            MemoryGpuConfig::ContextSize(4096),
+                            PagedCacheType::Auto,
+                        ).ok();
+
+                        let built_model = if is_safetensors {
+                            // Pilar 1 & 4: TextModelBuilder com In-Situ Quantization (ISQ Q4K) para Safetensors
+                            let mut builder = TextModelBuilder::new(parent_dir.to_string_lossy().to_string())
+                                .with_isq(IsqType::Q4K);
+                            if let Some(ref p_cfg) = paged_cfg {
+                                builder = builder.with_paged_attn(p_cfg.clone());
+                            }
+                            Arc::new(builder.build().await.map_err(|e| {
+                                InferenceError::ExecutionError(format!("Falha ao carregar modelo Safetensors via TextModelBuilder: {}", e))
+                            })?)
+                        } else {
+                            // Pilar 1 & 2: GgufModelBuilder com PagedAttention
+                            let mut builder = GgufModelBuilder::new(
+                                parent_dir.to_string_lossy().to_string(),
+                                vec![filename],
+                            );
+                            if let Some(ref p_cfg) = paged_cfg {
+                                builder = builder.with_paged_attn(p_cfg.clone());
+                            }
+                            Arc::new(builder.build().await.map_err(|e| {
+                                InferenceError::ExecutionError(format!("Falha ao carregar modelo GGUF via GgufModelBuilder: {}", e))
+                            })?)
+                        };
+
+                        if let Ok(mut lock) = get_mistral_cache().lock() {
+                            *lock = Some((cache_key, built_model.clone()));
+                        }
+                        built_model
+                    }
+                };
 
                 let mut messages = TextMessages::new();
                 if !req.system_prompt.trim().is_empty() {

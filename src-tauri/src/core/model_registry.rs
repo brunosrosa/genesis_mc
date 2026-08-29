@@ -1294,6 +1294,7 @@ pub fn update_tier1_result(
     tpot_ms: f64,
     vram_peak_mb: f64,
     e3_score: f64,
+    engine_type: Option<&str>,
 ) -> Result<(), String> {
     let tier1_passed_val = if passed { 1 } else { 0 };
     conn.execute(
@@ -1305,8 +1306,9 @@ pub fn update_tier1_result(
              tpot_ms = ?5, 
              vram_peak_mb = ?6, 
              e3_score = ?7, 
+             engine_type = COALESCE(?8, engine_type),
              last_seen = DATETIME('now')
-         WHERE file_path = ?8",
+         WHERE file_path = ?9",
         params![
             tier1_passed_val,
             success_rate,
@@ -1315,6 +1317,7 @@ pub fn update_tier1_result(
             tpot_ms,
             vram_peak_mb,
             e3_score,
+            engine_type,
             file_path
         ],
     )

@@ -1488,6 +1488,7 @@ async fn run_mode_profile(
             (r.tpot_us as f64) / 1000.0,
             r.vram_model_mb + r.vram_kv_mb,
             r.e3_score,
+            Some(&r.engine_selected),
         );
     }
 

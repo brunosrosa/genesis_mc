@@ -504,6 +504,7 @@ async fn run_tier1_guillotine(conn: &Connection, models: &[PathBuf], bench_dir: 
             avg_tpot,
             avg_vram,
             consolidated_e3,
+            None,
         ).is_ok() {
             saved_to_db_count += 1;
         }
