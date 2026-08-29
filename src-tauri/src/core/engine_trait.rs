@@ -131,14 +131,14 @@ impl EngineProbe for LlamaVanguardProbe {
             return EngineSupportLevel::Unsupported("Arquitetura RWKV requer runtime linear dedicado".to_string());
         }
 
-        // Modelos específicos com preferência por llama_upstream
-        if fam_lower.contains("phi") || path_lower.contains("phi-4") || fam_lower.contains("nemotron") || path_lower.contains("nemotron") || fam_lower.contains("lfm") || path_lower.contains("lfm") || path_lower.contains("rnj") || path_lower.contains("hy-mt2") {
-            return EngineSupportLevel::Fallback(100);
+        // Modelos específicos que exigem kernels upstream do llama.cpp oficial ou quantização Q1
+        if fam_lower.contains("phi") || path_lower.contains("phi-4") || fam_lower.contains("nemotron") || path_lower.contains("nemotron") || fam_lower.contains("lfm") || path_lower.contains("lfm") || path_lower.contains("rnj") || path_lower.contains("hy-mt2") || path_lower.contains("q1_0") || path_lower.contains("iq1_") {
+            return EngineSupportLevel::Unsupported("Modelo com arquitetura/quantização que exige llama_upstream oficial".to_string());
         }
 
         // Mamba / SSM
         if fam_lower.contains("mamba") || path_lower.contains("mamba") || fam_lower.contains("zamba") || path_lower.contains("zamba") {
-            return EngineSupportLevel::Fallback(100);
+            return EngineSupportLevel::Unsupported("Arquitetura Mamba/SSM roteada para llama_upstream".to_string());
         }
 
         match topology.file_format {
@@ -189,7 +189,12 @@ impl EngineProbe for MistralRsSidecarProbe {
             return EngineSupportLevel::Unsupported("GGUF Mamba/SSM requer llama_upstream (mistral_rs GGUF parser não implementado)".to_string());
         }
 
-        // Suporte a pesos Safetensors / HuggingFace nativos
+        // Modelos Encoder-Only / GLiClass são discriminativos e devem ser roteados para o OrtScorer
+        if path_lower.contains("gliclass") || fam_lower.contains("gliclass") || path_lower.contains("deberta") || fam_lower.contains("deberta") {
+            return EngineSupportLevel::Unsupported("GLiClass/DeBERTa é discriminativo (roteado para ort_scorer)".to_string());
+        }
+
+        // Suporte a pesos Safetensors / HuggingFace nativos de LLMs generativos
         if path_lower.ends_with(".safetensors") || path_lower.ends_with(".bin") {
             #[cfg(feature = "mistral_backend")]
             return EngineSupportLevel::Native(250);

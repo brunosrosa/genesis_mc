@@ -111,7 +111,7 @@ def classify_model_tier(model_info: Dict[str, Any]) -> str:
     # Critérios de tamanho de parâmetros / tensores
     if "135m" in filename or "360m" in filename or "k1" in filename or "gliclass" in filename or (0 < size_mb < 600):
         return "Tier 0 (Bootstrap & CPU Sanity)"
-    elif "790m" in filename or "1b" in filename or "1.2b" in filename or "1.5b" in filename or (600 <= size_mb <= 1800):
+    elif "790m" in filename or "1b" in filename or "1.2b" in filename or "1.5b" in filename or ("gemma" in filename and "e2b" in filename) or (600 <= size_mb <= 1800):
         return "Tier 0.5 (Sensor Epistêmico)"
     elif "27b" in filename or "33b" in filename or "moe" in filename or "laguna" in filename or "14b" in filename or size_mb > 4500:
         return "Tier 2 (Background Agent & MoE Híbrido)"

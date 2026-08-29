@@ -1205,7 +1205,16 @@ pub fn sync_local_models_to_registry(conn: &Connection, models_dir: &Path) -> Re
                         let path_str = path.to_string_lossy().to_string();
                         scanned_paths.push(path_str.clone());
                         let file_size_bytes = fs::metadata(path).map(|m| m.len() as i64).unwrap_or(0);
-                        let model_name = path.file_stem().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "safetensors_model".to_string());
+                        let raw_name = path.file_stem().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "safetensors_model".to_string());
+                        let model_name = if raw_name == "model" || raw_name == "pytorch_model" || raw_name == "weights" {
+                            if let Some(parent) = path.parent().and_then(|p| p.file_name()) {
+                                format!("{}.safetensors", parent.to_string_lossy())
+                            } else {
+                                raw_name
+                            }
+                        } else {
+                            raw_name
+                        };
 
                         let _ = conn.execute(
                             "INSERT INTO model_registry (file_path, model_name, family, parameters, context_length, quantization, capabilities, file_size_bytes, is_active, module_type, engine_type, topology_json, last_seen)

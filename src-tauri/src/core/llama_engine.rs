@@ -178,47 +178,29 @@ pub fn calculate_safe_gpu_layers(model_path: &Path, meta: Option<&model_registry
         .map(|m| m.len() as f64 / (1024.0 * 1024.0))
         .unwrap_or(4000.0);
 
-    if file_size_mb > 10000.0 {
-        // Modelos massivos (> 10GB, ex: Laguna 14.7GB, 70B): Offload ultra conservador (máximo 4 camadas)
-        let total_layers = meta.map(|m| m.architecture.block_count).unwrap_or(40).max(1);
-        let mb_per_layer = file_size_mb / total_layers as f64;
-        let safe_layers = (1500.0 / mb_per_layer).floor() as u32;
-        return safe_layers.clamp(1, 4);
-    }
-
-    // 2. Parâmetros > 14B (ex: 27B, 32B, 70B): Na RTX 2060m (6GB), teto de VRAM é estrito
-    let is_large_model = if let Some(m) = meta {
-        m.parameters.contains("27B") || m.parameters.contains("32B") || m.parameters.contains("70B") || m.parameters.contains("14B")
-    } else {
-        path_lower.contains("27b") || path_lower.contains("32b") || path_lower.contains("70b")
-    };
-
-    if is_large_model {
-        let total_layers = meta
-            .map(|m| m.architecture.block_count)
-            .unwrap_or(62)
-            .max(1);
-        let safe_layers = (total_layers / 6).min(10);
-        tracing::info!(
-            "Modelo de Grande Porte ({:.1}MB). Offload híbrido seguro: {}/{} camadas na GPU.",
-            file_size_mb, safe_layers, total_layers
-        );
-        return safe_layers.max(1);
-    }
-
     const SAFE_VRAM_WEIGHTS_MB: f64 = 4200.0;
 
+    // Se o modelo (mesmo 27B em quantização Q1) pesa <= 4.2GB, cabe 100% na VRAM da RTX 2060m!
     if file_size_mb <= SAFE_VRAM_WEIGHTS_MB {
-        99 // Offload completo na GPU para modelos <= 8B
-    } else {
-        let total_layers = meta
-            .map(|m| m.architecture.block_count)
-            .unwrap_or(32)
-            .max(1);
-        let mb_per_layer = file_size_mb / total_layers as f64;
-        let safe_layers = (SAFE_VRAM_WEIGHTS_MB / mb_per_layer).floor() as u32;
-        safe_layers.max(1)
+        return 99; // Offload completo na GPU
     }
+
+    if file_size_mb > 10000.0 {
+        // Modelos massivos (> 10GB, ex: Laguna 14.7GB, 70B): Offload seguro para GPU com TurboQuant KV
+        let total_layers = meta.map(|m| m.architecture.block_count).unwrap_or(40).max(1);
+        let mb_per_layer = file_size_mb / total_layers as f64;
+        let safe_layers = (2500.0 / mb_per_layer).floor() as u32;
+        return safe_layers.clamp(1, 8);
+    }
+
+    // Modelos entre 4.2GB e 10GB
+    let total_layers = meta
+        .map(|m| m.architecture.block_count)
+        .unwrap_or(32)
+        .max(1);
+    let mb_per_layer = file_size_mb / total_layers as f64;
+    let safe_layers = (SAFE_VRAM_WEIGHTS_MB / mb_per_layer).floor() as u32;
+    safe_layers.max(1)
 }
 
 pub fn cap_context_length_for_family(family: &str, declared_ctx: u32) -> u32 {
