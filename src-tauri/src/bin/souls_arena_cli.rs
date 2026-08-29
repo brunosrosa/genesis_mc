@@ -1233,16 +1233,18 @@ async fn run_mode_profile(
                 tokio::time::sleep(std::time::Duration::from_millis(500)).await;
             }
 
-            if !json_mode {
-                println!("\n[TIER 0 PROFILE] Modelo: {} | Executando Passada CPU (AVX2)...", name);
+            if !name.to_lowercase().ends_with(".onnx") {
+                if !json_mode {
+                    println!("\n[TIER 0 PROFILE] Modelo: {} | Executando Passada CPU (AVX2)...", name);
+                }
+                let res_cpu = profile_single_model_pass(m, ModelTier::Tier0Bootstrap, Some("llama_cpp4"), true, json_mode).await;
+                tier0_res.push(res_cpu.clone());
+                all_results.push(res_cpu);
+                if !json_mode {
+                    println!("[FastSwitch] VRAM purgada.");
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
             }
-            let res_cpu = profile_single_model_pass(m, ModelTier::Tier0Bootstrap, Some("llama_cpp4"), true, json_mode).await;
-            tier0_res.push(res_cpu.clone());
-            all_results.push(res_cpu);
-            if !json_mode {
-                println!("[FastSwitch] VRAM purgada.");
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
         }
         if !json_mode {
             print_tier_profile_table(ModelTier::Tier0Bootstrap.title(), &tier0_res);
@@ -1284,16 +1286,18 @@ async fn run_mode_profile(
                 tokio::time::sleep(std::time::Duration::from_millis(500)).await;
             }
 
-            if !json_mode {
-                println!("\n[TIER 0.5 PROFILE] Modelo: {} | Executando Passada CPU (AVX2)...", name);
+            if !name.to_lowercase().ends_with(".onnx") {
+                if !json_mode {
+                    println!("\n[TIER 0.5 PROFILE] Modelo: {} | Executando Passada CPU (AVX2)...", name);
+                }
+                let res_cpu = profile_single_model_pass(m, ModelTier::Tier05Epistemic, Some("llama_cpp4"), true, json_mode).await;
+                tier05_res.push(res_cpu.clone());
+                all_results.push(res_cpu);
+                if !json_mode {
+                    println!("[FastSwitch] VRAM purgada.");
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
             }
-            let res_cpu = profile_single_model_pass(m, ModelTier::Tier05Epistemic, Some("llama_cpp4"), true, json_mode).await;
-            tier05_res.push(res_cpu.clone());
-            all_results.push(res_cpu);
-            if !json_mode {
-                println!("[FastSwitch] VRAM purgada.");
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
         }
         if !json_mode {
             print_tier_profile_table(ModelTier::Tier05Epistemic.title(), &tier05_res);
@@ -1917,7 +1921,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     i += 1;
                 }
             }
-            "--model" => {
+            "--model" | "--filter" => {
                 if i + 1 < args.len() {
                     model_filter = Some(args[i + 1].clone());
                     i += 1;

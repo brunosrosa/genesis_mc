@@ -183,15 +183,29 @@ impl EngineProbe for MistralRsSidecarProbe {
         let path_lower = model_path.to_string_lossy().to_lowercase();
         let fam_lower = topology.family_raw.to_lowercase();
 
+        // Modelos GGUF de Mamba/SSM sofrem 'not implemented' no GGUF parser do mistralrs-core 0.8.1.
+        // São roteados exclusivamente para o llama_upstream.
         if fam_lower.contains("mamba") || path_lower.contains("mamba") || fam_lower.contains("zamba") || path_lower.contains("zamba") {
-            return EngineSupportLevel::Native(250);
+            return EngineSupportLevel::Unsupported("GGUF Mamba/SSM requer llama_upstream (mistral_rs GGUF parser não implementado)".to_string());
         }
 
-        #[cfg(feature = "mistral_backend")]
-        return EngineSupportLevel::Native(210);
+        // Suporte a pesos Safetensors / HuggingFace nativos
+        if path_lower.ends_with(".safetensors") || path_lower.ends_with(".bin") {
+            #[cfg(feature = "mistral_backend")]
+            return EngineSupportLevel::Native(250);
+            #[cfg(not(feature = "mistral_backend"))]
+            return EngineSupportLevel::Fallback(80);
+        }
 
-        #[cfg(not(feature = "mistral_backend"))]
-        EngineSupportLevel::Fallback(80)
+        // Modelos Mistral GGUF puros
+        if fam_lower.contains("mistral") || path_lower.contains("mistral") || path_lower.contains("mixtral") {
+            #[cfg(feature = "mistral_backend")]
+            return EngineSupportLevel::Native(210);
+            #[cfg(not(feature = "mistral_backend"))]
+            return EngineSupportLevel::Fallback(80);
+        }
+
+        EngineSupportLevel::Unsupported("mistral_rs reservado para pesos Safetensors ou arquiteturas Mistral".to_string())
     }
 }
 
@@ -246,9 +260,13 @@ impl EngineProbe for OrtScorerProbe {
         "ort_scorer"
     }
 
-    fn probe_support(&self, _model_path: &Path, _topology: &TopologyFeatures) -> EngineSupportLevel {
-        // Scorers ONNX pequenos (GLiClass, BGE-reranker). Fallback (70) ate ONNX disponivel.
-        EngineSupportLevel::Fallback(70)
+    fn probe_support(&self, model_path: &Path, topology: &TopologyFeatures) -> EngineSupportLevel {
+        let path_lower = model_path.to_string_lossy().to_lowercase();
+        if path_lower.ends_with(".onnx") || path_lower.contains("gliclass") || topology.file_format == FileFormat::Onnx {
+            EngineSupportLevel::Native(290)
+        } else {
+            EngineSupportLevel::Unsupported("OrtScorer exclusivo para modelos ONNX de intenção (GLiClass)".to_string())
+        }
     }
 }
 

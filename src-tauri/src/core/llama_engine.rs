@@ -178,6 +178,14 @@ pub fn calculate_safe_gpu_layers(model_path: &Path, meta: Option<&model_registry
         .map(|m| m.len() as f64 / (1024.0 * 1024.0))
         .unwrap_or(4000.0);
 
+    if file_size_mb > 10000.0 {
+        // Modelos massivos (> 10GB, ex: Laguna 14.7GB, 70B): Offload ultra conservador (máximo 4 camadas)
+        let total_layers = meta.map(|m| m.architecture.block_count).unwrap_or(40).max(1);
+        let mb_per_layer = file_size_mb / total_layers as f64;
+        let safe_layers = (1500.0 / mb_per_layer).floor() as u32;
+        return safe_layers.clamp(1, 4);
+    }
+
     // 2. Parâmetros > 14B (ex: 27B, 32B, 70B): Na RTX 2060m (6GB), teto de VRAM é estrito
     let is_large_model = if let Some(m) = meta {
         m.parameters.contains("27B") || m.parameters.contains("32B") || m.parameters.contains("70B") || m.parameters.contains("14B")
@@ -190,7 +198,7 @@ pub fn calculate_safe_gpu_layers(model_path: &Path, meta: Option<&model_registry
             .map(|m| m.architecture.block_count)
             .unwrap_or(62)
             .max(1);
-        let safe_layers = (total_layers / 4).min(16);
+        let safe_layers = (total_layers / 6).min(10);
         tracing::info!(
             "Modelo de Grande Porte ({:.1}MB). Offload híbrido seguro: {}/{} camadas na GPU.",
             file_size_mb, safe_layers, total_layers
@@ -219,7 +227,8 @@ pub fn cap_context_length_for_family(family: &str, declared_ctx: u32) -> u32 {
         // Hard Cap de contenção térmica na família Gemma (Gemma2/Gemma4) estancando Stack Buffer Overrun (0xc0000409) em SWA
         declared_ctx.min(32768)
     } else {
-        declared_ctx
+        // Blindagem Global RTX 2060m (6GB VRAM): Contextos > 32k em modelos grandes explodem o buffer CUDA KV Cache (8GB+)
+        declared_ctx.min(32768)
     }
 }
 
