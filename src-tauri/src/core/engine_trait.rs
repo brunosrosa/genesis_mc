@@ -94,8 +94,8 @@ impl EngineProbe for LlamaUpstreamProbe {
             return EngineSupportLevel::Unsupported("Arquitetura RWKV requer runtime linear dedicado".to_string());
         }
 
-        // Modelos específicos que exigem kernels upstream do llama.cpp oficial
-        if fam_lower.contains("phi") || path_lower.contains("phi-4") || fam_lower.contains("nemotron") || path_lower.contains("nemotron") || fam_lower.contains("lfm") || path_lower.contains("lfm") || path_lower.contains("rnj") || path_lower.contains("hy-mt2") {
+        // Modelos específicos que exigem kernels upstream do llama.cpp oficial ou BitNet 1.58b
+        if fam_lower.contains("phi") || path_lower.contains("phi-4") || fam_lower.contains("nemotron") || path_lower.contains("nemotron") || fam_lower.contains("lfm") || path_lower.contains("lfm") || path_lower.contains("rnj") || path_lower.contains("hy-mt2") || path_lower.contains("i2_s") || path_lower.contains("bitnet") || fam_lower.contains("bitnet") {
             return EngineSupportLevel::Native(220);
         }
 
@@ -131,8 +131,8 @@ impl EngineProbe for LlamaVanguardProbe {
             return EngineSupportLevel::Unsupported("Arquitetura RWKV requer runtime linear dedicado".to_string());
         }
 
-        // Modelos específicos que exigem kernels upstream do llama.cpp oficial ou quantização Q1
-        if fam_lower.contains("phi") || path_lower.contains("phi-4") || fam_lower.contains("nemotron") || path_lower.contains("nemotron") || fam_lower.contains("lfm") || path_lower.contains("lfm") || path_lower.contains("rnj") || path_lower.contains("hy-mt2") || path_lower.contains("q1_0") || path_lower.contains("iq1_") {
+        // Modelos específicos que exigem kernels upstream do llama.cpp oficial ou quantização Q1 / BitNet
+        if fam_lower.contains("phi") || path_lower.contains("phi-4") || fam_lower.contains("nemotron") || path_lower.contains("nemotron") || fam_lower.contains("lfm") || path_lower.contains("lfm") || path_lower.contains("rnj") || path_lower.contains("hy-mt2") || path_lower.contains("q1_0") || path_lower.contains("iq1_") || path_lower.contains("i2_s") || path_lower.contains("bitnet") {
             return EngineSupportLevel::Unsupported("Modelo com arquitetura/quantização que exige llama_upstream oficial".to_string());
         }
 
@@ -183,10 +183,13 @@ impl EngineProbe for MistralRsSidecarProbe {
         let path_lower = model_path.to_string_lossy().to_lowercase();
         let fam_lower = topology.family_raw.to_lowercase();
 
-        // Modelos GGUF de Mamba/SSM sofrem 'not implemented' no GGUF parser do mistralrs-core 0.8.1.
-        // São roteados exclusivamente para o llama_upstream.
-        if fam_lower.contains("mamba") || path_lower.contains("mamba") || fam_lower.contains("zamba") || path_lower.contains("zamba") {
-            return EngineSupportLevel::Unsupported("GGUF Mamba/SSM requer llama_upstream (mistral_rs GGUF parser não implementado)".to_string());
+        // Modelos GGUF não suportados pelo parser do mistralrs-core 0.8.1
+        if fam_lower.contains("mamba") || path_lower.contains("mamba") || fam_lower.contains("zamba") || path_lower.contains("zamba")
+            || fam_lower.contains("gemma4") || path_lower.contains("gemma-4") || path_lower.contains("gemma4")
+            || fam_lower.contains("phi-4") || path_lower.contains("phi4") || fam_lower.contains("nemotron") || path_lower.contains("nemotron")
+            || path_lower.contains("lfm") || fam_lower.contains("lfm") || path_lower.contains("rnj")
+            || path_lower.contains("i2_s") || path_lower.contains("bitnet") || path_lower.contains("q1_0") || path_lower.contains("iq1_") {
+            return EngineSupportLevel::Unsupported("GGUF com arquitetura/quantização não suportada pelo mistralrs-core 0.8.1 (roteado para llama_upstream)".to_string());
         }
 
         // Modelos Encoder-Only / GLiClass são discriminativos e devem ser roteados para o OrtScorer
@@ -202,7 +205,7 @@ impl EngineProbe for MistralRsSidecarProbe {
             return EngineSupportLevel::Fallback(80);
         }
 
-        // Modelos Mistral GGUF puros
+        // Modelos Mistral/Mixtral GGUF puros
         if fam_lower.contains("mistral") || path_lower.contains("mistral") || path_lower.contains("mixtral") {
             #[cfg(feature = "mistral_backend")]
             return EngineSupportLevel::Native(210);
@@ -210,7 +213,15 @@ impl EngineProbe for MistralRsSidecarProbe {
             return EngineSupportLevel::Fallback(80);
         }
 
-        EngineSupportLevel::Unsupported("mistral_rs reservado para pesos Safetensors ou arquiteturas Mistral".to_string())
+        // Suporte a outros modelos Transformer GGUF compatíveis (Llama, Qwen, Gemma v1/v2, Phi2/3)
+        if matches!(topology.file_format, FileFormat::Gguf) {
+            #[cfg(feature = "mistral_backend")]
+            return EngineSupportLevel::Fallback(170);
+            #[cfg(not(feature = "mistral_backend"))]
+            return EngineSupportLevel::Fallback(80);
+        }
+
+        EngineSupportLevel::Unsupported("Formato ou arquitetura incompatível com mistral_rs".to_string())
     }
 }
 
@@ -225,7 +236,8 @@ impl EngineProbe for BitnetProbe {
         let path_lower = model_path.to_string_lossy().to_lowercase();
         let fam_lower = topology.family_raw.to_lowercase();
         if fam_lower.contains("bitnet") || path_lower.contains("i2_s") || path_lower.contains("i1_s") || path_lower.contains("bitnet") || path_lower.contains("ternary") {
-            EngineSupportLevel::Native(220)
+            // Roteia transparentemente para llama_upstream que possui kernels i2_s incorporados
+            EngineSupportLevel::Fallback(160)
         } else {
             EngineSupportLevel::Unsupported("Bitnet só suporta modelos ternários (i2_s, i1_s, bitnet)".to_string())
         }

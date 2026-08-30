@@ -69,6 +69,11 @@ impl EphemeralInferEngine for LlamaUpstreamEngine {
                 .arg(req.max_tokens.to_string())
                 .arg("--temp")
                 .arg(req.temperature.to_string())
+                .arg("-ctv")
+                .arg("q4_0")
+                .arg("-ctk")
+                .arg("f16")
+                .arg("-fa")
                 .arg("--log-disable");
 
             if let Ok(output) = cmd.output() {

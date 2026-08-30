@@ -1,4 +1,6 @@
+#[cfg(feature = "mistral_backend")]
 use std::path::Path;
+#[cfg(feature = "mistral_backend")]
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Instant;
 use tokio::sync::watch;
@@ -10,7 +12,7 @@ use crate::core::inference_adapter::{
 
 #[cfg(feature = "mistral_backend")]
 use mistralrs::{
-    GgufModelBuilder, TextModelBuilder, TextMessageRole, TextMessages, IsqType, Model,
+    GgufModelBuilder, TextModelBuilder, TextMessageRole, RequestBuilder, IsqType, Model,
     PagedAttentionConfig, MemoryGpuConfig, PagedCacheType,
 };
 
@@ -20,8 +22,23 @@ pub struct MistralRsEngine;
 static MISTRAL_PIPELINE_CACHE: OnceLock<Mutex<Option<(String, Arc<Model>)>>> = OnceLock::new();
 
 #[cfg(feature = "mistral_backend")]
+static MISTRAL_RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
+
+#[cfg(feature = "mistral_backend")]
 fn get_mistral_cache() -> &'static Mutex<Option<(String, Arc<Model>)>> {
     MISTRAL_PIPELINE_CACHE.get_or_init(|| Mutex::new(None))
+}
+
+#[cfg(feature = "mistral_backend")]
+fn get_mistral_runtime() -> Result<&'static tokio::runtime::Runtime, InferenceError> {
+    MISTRAL_RUNTIME.get_or_init(|| {
+        tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(4)
+            .enable_all()
+            .build()
+            .expect("Falha ao inicializar Tokio Runtime global para Mistral.rs")
+    });
+    MISTRAL_RUNTIME.get().ok_or_else(|| InferenceError::ExecutionError("Mistral Runtime indisponível".to_string()))
 }
 
 #[cfg(feature = "mistral_backend")]
@@ -49,10 +66,7 @@ impl EphemeralInferEngine for MistralRsEngine {
         };
 
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let rt = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .map_err(|e| InferenceError::ExecutionError(format!("Falha ao criar runtime Tokio: {}", e)))?;
+            let rt = get_mistral_runtime()?;
 
             rt.block_on(async {
                 let is_safetensors = filename.to_lowercase().ends_with(".safetensors") || filename.to_lowercase().ends_with(".bin");
@@ -94,11 +108,19 @@ impl EphemeralInferEngine for MistralRsEngine {
                                 InferenceError::ExecutionError(format!("Falha ao carregar modelo Safetensors via TextModelBuilder: {}", e))
                             })?)
                         } else {
-                            // Pilar 1 & 2: GgufModelBuilder com PagedAttention
+                            // Pilar 1 & 2: GgufModelBuilder com PagedAttention e detecção local de Tokenizer
                             let mut builder = GgufModelBuilder::new(
                                 parent_dir.to_string_lossy().to_string(),
                                 vec![filename],
                             );
+                            let tok_json = parent_dir.join("tokenizer.json");
+                            if tok_json.exists() {
+                                builder = builder.with_tokenizer_json(tok_json.to_string_lossy().to_string());
+                            }
+                            let chat_tmpl = parent_dir.join("chat_template.json");
+                            if chat_tmpl.exists() {
+                                builder = builder.with_chat_template(chat_tmpl.to_string_lossy().to_string());
+                            }
                             if let Some(ref p_cfg) = paged_cfg {
                                 builder = builder.with_paged_attn(p_cfg.clone());
                             }
@@ -114,17 +136,21 @@ impl EphemeralInferEngine for MistralRsEngine {
                     }
                 };
 
-                let mut messages = TextMessages::new();
+                let mut builder_req = RequestBuilder::new();
                 if !req.system_prompt.trim().is_empty() {
-                    messages = messages.add_message(TextMessageRole::System, req.system_prompt.trim());
+                    builder_req = builder_req.add_message(TextMessageRole::System, req.system_prompt.trim());
                 }
                 for (input, output) in &req.few_shot_examples {
-                    messages = messages.add_message(TextMessageRole::User, input.trim());
-                    messages = messages.add_message(TextMessageRole::Assistant, output.trim());
+                    builder_req = builder_req.add_message(TextMessageRole::User, input.trim());
+                    builder_req = builder_req.add_message(TextMessageRole::Assistant, output.trim());
                 }
-                messages = messages.add_message(TextMessageRole::User, req.user_query.trim());
+                builder_req = builder_req
+                    .add_message(TextMessageRole::User, req.user_query.trim())
+                    .set_sampler_max_len(req.max_tokens as usize)
+                    .set_sampler_temperature(req.temperature as f64)
+                    .with_truncate_sequence(true);
 
-                let response = model.send_chat_request(messages).await
+                let response = model.send_chat_request(builder_req).await
                     .map_err(|e| InferenceError::ExecutionError(format!("Falha na inferencia Mistral: {}", e)))?;
 
                 let choice = response.choices.first()
