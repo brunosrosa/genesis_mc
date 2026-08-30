@@ -1116,10 +1116,11 @@ async fn profile_single_model_pass(
     };
 
     let timeout_secs = match tier {
-        ModelTier::Tier0Bootstrap | ModelTier::Tier05Epistemic => 60,
-        ModelTier::Tier1Master => 120,
-        ModelTier::Tier2Background => 180,
-        _ => 120,
+        ModelTier::Tier0Bootstrap => if engine_id == "mistral_rs" { 180 } else { 60 },
+        ModelTier::Tier05Epistemic => if engine_id == "mistral_rs" { 180 } else { 90 },
+        ModelTier::Tier1Master => if engine_id == "mistral_rs" { 300 } else { 120 },
+        ModelTier::Tier2Background => if engine_id == "mistral_rs" { 360 } else { 180 },
+        _ => 180,
     };
 
     for test_case in &sanity_cases {
