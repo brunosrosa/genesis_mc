@@ -1404,6 +1404,9 @@ pub fn collect_local_models(models_dir: &Path) -> Vec<PathBuf> {
                     }
                 } else if ext_lower == "safetensors" || ext_lower == "bin" {
                     if !filename.contains("adapter") {
+                        if filename.contains("-of-000") && !filename.contains("-00001-of-") {
+                            continue;
+                        }
                         files.push(path.to_path_buf());
                     }
                 }

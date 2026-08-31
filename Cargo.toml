@@ -109,7 +109,7 @@ windows-projfs = "=0.1.8"
 # --- ML Inference ---
 ik-llama-cpp-2 = { path = "src-tauri/vendor/ik-llama-cpp-2", features = ["cuda"] }
 ik-llama-cpp-sys = { path = "src-tauri/vendor/ik-llama-cpp-sys" }
-mistralrs = "0.8"
+mistralrs = "=0.8.1"
 llguidance = "1.7"
 
 # --- Test-only ---
@@ -127,7 +127,7 @@ incremental = false
 [profile.release]
 debug-assertions = false
 lto = "thin"
-panic = "abort"
+panic = "unwind"
 codegen-units = 1
 strip = "symbols"
 opt-level = 3

@@ -1082,20 +1082,41 @@ async fn profile_single_model_pass(
     let raw_gpu_layers = if force_cpu { 0 } else { souls_mc_lib::core::llama_engine::calculate_safe_gpu_layers(model_path, meta.as_ref()) };
     #[cfg(not(any(feature = "ik_llama_backend", feature = "llama_backend")))]
     let raw_gpu_layers = 0;
-
     let total_layers = meta.as_ref().map(|m| m.architecture.block_count).unwrap_or(32).max(1);
     let (is_cpu, is_gpu, is_hybrid, hybrid_desc, kv_cache, vram_model_mb, vram_kv_mb, ram_model_mb) = if force_cpu || raw_gpu_layers == 0 {
         let kv_max_gb = (declared_ctx as f64 * 32.0 * 2.0 * 2.0) / (1024.0 * 1024.0);
         (true, false, false, "".to_string(), format!("36MB/{:.1}GB(F16)", kv_max_gb), 0.0, 0.0, file_size_mb)
     } else if raw_gpu_layers >= total_layers || raw_gpu_layers == 99 {
-        let is_tq = matches!(tier, ModelTier::Tier2Background) || declared_ctx > 32768;
-        let (kv_ratio, kv_tag) = if is_tq { (0.25, "TQ2") } else { (0.5, "Q4") };
+        let (kv_ratio, kv_tag) = if engine_selected == "ik_llama_vanguard" {
+            if matches!(tier, ModelTier::Tier2Background) || declared_ctx > 32768 {
+                (0.25, "TQ2")
+            } else {
+                (0.5, "TQ4")
+            }
+        } else if engine_selected == "llama_upstream" {
+            (0.625, "Q4_V")
+        } else if engine_selected == "mistral_rs" {
+            (1.0, "PagedAttn")
+        } else {
+            (1.0, "F16")
+        };
         let kv_max_gb = (declared_ctx as f64 * 32.0 * kv_ratio * 2.0) / (1024.0 * 1024.0);
         (false, true, false, "".to_string(), format!("36MB/{:.1}GB({})", kv_max_gb, kv_tag), file_size_mb * 0.95, 36.0, 0.0)
     } else {
         let gpu_ratio = (raw_gpu_layers as f64 / total_layers as f64).clamp(0.0, 1.0);
-        let is_tq = matches!(tier, ModelTier::Tier2Background) || declared_ctx > 32768;
-        let (kv_ratio, kv_tag) = if is_tq { (0.25, "TQ2") } else { (0.5, "Q4") };
+        let (kv_ratio, kv_tag) = if engine_selected == "ik_llama_vanguard" {
+            if matches!(tier, ModelTier::Tier2Background) || declared_ctx > 32768 {
+                (0.25, "TQ2")
+            } else {
+                (0.5, "TQ4")
+            }
+        } else if engine_selected == "llama_upstream" {
+            (0.625, "Q4_V")
+        } else if engine_selected == "mistral_rs" {
+            (1.0, "PagedAttn")
+        } else {
+            (1.0, "F16")
+        };
         let kv_max_gb = (declared_ctx as f64 * 32.0 * kv_ratio * 2.0) / (1024.0 * 1024.0);
         (true, true, true, format!("{}/{}L", raw_gpu_layers, total_layers), format!("36MB/{:.1}GB({})", kv_max_gb, kv_tag), file_size_mb * gpu_ratio, 36.0, file_size_mb * (1.0 - gpu_ratio))
     };

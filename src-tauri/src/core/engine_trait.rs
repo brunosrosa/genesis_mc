@@ -185,6 +185,7 @@ impl EngineProbe for MistralRsSidecarProbe {
 
         // Modelos GGUF não suportados pelo parser do mistralrs-core 0.8.1
         if fam_lower.contains("mamba") || path_lower.contains("mamba") || fam_lower.contains("zamba") || path_lower.contains("zamba")
+            || fam_lower.contains("qwen35") || path_lower.contains("qwen35") || fam_lower.contains("qwen3.5") || path_lower.contains("qwen3.5") || fam_lower.contains("qwen3_5") || path_lower.contains("qwen3_5")
             || fam_lower.contains("gemma4") || path_lower.contains("gemma-4") || path_lower.contains("gemma4")
             || fam_lower.contains("phi-4") || path_lower.contains("phi4") || fam_lower.contains("nemotron") || path_lower.contains("nemotron")
             || path_lower.contains("lfm") || fam_lower.contains("lfm") || path_lower.contains("rnj")
