@@ -1,0 +1,9 @@
+[package]
+name = "souls_protocol"
+version = "0.1.0"
+edition = "2021"
+description = "DTOs compartilhados, mensagens IPC e eventos tipados do SOULS MC"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }

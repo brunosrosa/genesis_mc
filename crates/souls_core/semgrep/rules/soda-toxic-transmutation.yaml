@@ -1,0 +1,116 @@
+rules:
+  - id: souls.needs-transmutation.react
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "ALERTA SOULS: Tecnologia tóxica ou frágil detectada. Não integrar código bruto. Reter apenas para estudo de Blueprint e agendar transmutação cirúrgica para Rust/Svelte 5."
+    metadata:
+      souls_lens: transmutation
+      category: toxic-stack
+      technology: [react, javascript, typescript]
+    pattern-either:
+      - pattern: import React from "react"
+      - pattern: import * as React from "react"
+      - pattern: const React = require("react")
+
+  - id: souls.needs-transmutation.express
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "ALERTA SOULS: Tecnologia tóxica ou frágil detectada. Não integrar código bruto. Reter apenas para estudo de Blueprint e agendar transmutação cirúrgica para Rust/Svelte 5."
+    metadata:
+      souls_lens: transmutation
+      category: toxic-stack
+      technology: [express, javascript, typescript]
+    pattern-either:
+      - pattern: import express from "express"
+      - pattern: const express = require("express")
+      - pattern: require("express")
+
+  - id: souls.needs-transmutation.electron
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "ALERTA SOULS: Tecnologia tóxica ou frágil detectada. Não integrar código bruto. Reter apenas para estudo de Blueprint e agendar transmutação cirúrgica para Rust/Svelte 5."
+    metadata:
+      souls_lens: transmutation
+      category: toxic-stack
+      technology: [electron, javascript, typescript]
+    pattern-either:
+      - pattern: import { BrowserWindow } from "electron"
+      - pattern: import electron from "electron"
+      - pattern: const electron = require("electron")
+
+  - id: souls.needs-transmutation.vue
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "ALERTA SOULS: Tecnologia tóxica ou frágil detectada. Não integrar código bruto. Reter apenas para estudo de Blueprint e agendar transmutação cirúrgica para Rust/Svelte 5."
+    metadata:
+      souls_lens: transmutation
+      category: toxic-stack
+      technology: [vue, javascript, typescript]
+    pattern-either:
+      - pattern: import Vue from "vue"
+      - pattern: import { createApp } from "vue"
+      - pattern: const Vue = require("vue")
+
+  - id: souls.needs-transmutation.python-web
+    languages: [python]
+    severity: INFO
+    message: "ALERTA SOULS: Tecnologia tóxica ou frágil detectada. Não integrar código bruto. Reter apenas para estudo de Blueprint e agendar transmutação cirúrgica para Rust/Svelte 5."
+    metadata:
+      souls_lens: transmutation
+      category: toxic-stack
+      technology: [python, flask, django, fastapi]
+    pattern-either:
+      - pattern: from flask import Flask
+      - pattern: import django
+      - pattern: from fastapi import FastAPI
+
+  - id: souls.fragility.rust-unwrap
+    languages: [rust]
+    severity: WARNING
+    message: "ALERTA SOULS: Tecnologia tóxica ou frágil detectada. Não integrar código bruto. Reter apenas para estudo de Blueprint e agendar transmutação cirúrgica para Rust/Svelte 5."
+    metadata:
+      souls_lens: transmutation
+      category: rust-fragility
+      technology: [rust]
+    pattern: $VALUE.unwrap()
+
+  - id: souls.fragility.rust-expect
+    languages: [rust]
+    severity: WARNING
+    message: "ALERTA SOULS: Tecnologia tóxica ou frágil detectada. Não integrar código bruto. Reter apenas para estudo de Blueprint e agendar transmutação cirúrgica para Rust/Svelte 5."
+    metadata:
+      souls_lens: transmutation
+      category: rust-fragility
+      technology: [rust]
+    pattern: $VALUE.expect(...)
+
+  - id: souls.fragility.rust-panic
+    languages: [rust]
+    severity: WARNING
+    message: "ALERTA SOULS: Tecnologia tóxica ou frágil detectada. Não integrar código bruto. Reter apenas para estudo de Blueprint e agendar transmutação cirúrgica para Rust/Svelte 5."
+    metadata:
+      souls_lens: transmutation
+      category: rust-fragility
+      technology: [rust]
+    pattern: panic!(...)
+
+  - id: souls.fragility.rust-sync-blocking-in-async
+    languages: [rust]
+    severity: WARNING
+    message: "ALERTA SOULS: Tecnologia tóxica ou frágil detectada. Não integrar código bruto. Reter apenas para estudo de Blueprint e agendar transmutação cirúrgica para Rust/Svelte 5."
+    metadata:
+      souls_lens: transmutation
+      category: rust-fragility
+      technology: [rust, async]
+    patterns:
+      - pattern-inside: |
+          async fn $FUNC(...) {
+            ...
+          }
+      - pattern-either:
+          - pattern: std::thread::sleep(...)
+          - pattern: std::fs::read(...)
+          - pattern: std::fs::read_to_string(...)
+          - pattern: std::fs::write(...)
+          - pattern: std::fs::metadata(...)
+          - pattern: std::fs::create_dir_all(...)

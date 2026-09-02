@@ -8,6 +8,7 @@
 
 import { invoke, Channel } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { soulsIpc, type TelemetrySnapshot } from "$lib/services/ipc";
 
 // ---------------------------------------------------------------------------
 // Bit-masks — DEVEM ser idênticas às constantes em `core/hardware_watchdog.rs`.
@@ -182,6 +183,18 @@ export async function bind_channel_to_runes(): Promise<() => void> {
     // Fallback gracioso se start_watchdog_stream não estiver disponível
   }
 
+  // Assinatura do canal unificado IPC souls_ui_shell
+  const unlistenIpc = soulsIpc.onEvent<TelemetrySnapshot>("telemetry/snapshot", (snapshot) => {
+    pendingState = {
+      vram_mb: snapshot.vram_used_mb,
+      ram_mb: snapshot.ram_used_mb,
+      cpu_temp: snapshot.cpu_usage_percent,
+      gpu_temp: snapshot.gpu_temperature_c,
+      thermal_throttle: snapshot.is_kill_switch_active,
+    };
+    scheduleUpdate();
+  });
+
   // Assinatura do canal de eventos 'hardware-telemetry'
   try {
     unlistenEvent = await listen<Uint8Array | ArrayBuffer | number[] | Partial<TelemetryState>>("hardware-telemetry", (event) => {
@@ -206,6 +219,7 @@ export async function bind_channel_to_runes(): Promise<() => void> {
     if (typeof document !== "undefined") {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     }
+    unlistenIpc();
     unlistenEvent?.();
   };
 }

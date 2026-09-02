@@ -25,8 +25,8 @@ O Souls MC repudia a execução de interpretadores pesados em *background* (Node
 1. **Backend (O Cérebro) — Rust + Tokio (Assíncrono).** Gerencia todo o I/O, persistência local, orquestração de Agentes, gateway MCP, harvester de repositórios, distillers e SAST pipeline.
 2. **Comunicação Zero-Garbage — IPC Zero-Copy.** Toda massa de dados entre processos e UI trafega via **FlatBuffers / Apache Arrow / rkyv**. Serialização JSON pesada é proibida em hot paths.
 3. **Sandboxing Tripartite.** Ferramentas de terceiros e scripts gerados por IA rodam como **Sidecars Efêmeros** — enjaulados via *Wasmtime* (lógica pura) ou *Landlock / AppContainer* (host) e destruídos com **SIGKILL atômico** após o uso. Asfixia de RAM é vetada por design.
-4. **Frontend (O Terminal Burro) — Svelte 5 (Runes) + Tauri v2 + Tailwind v4.** UI estritamente passiva (Zero-VDOM). Frameworks baseados em Virtual DOM (React, Vue) estão **banidos** — a "Morte do Virtual DOM" é lei.
-5. **Tiling Window Manager 2D & Zero Layout Shift.** Janelas flutuantes caóticas, "Liquid Glass" (blur) e modais que causam refusão de layout são proibidos. Adotamos planaridade ortogonal e **GenUI Efêmera** (injeção de interface sem quebrar o espaço cognitivo).
+4. **Frontend (O Terminal Burro) — Svelte 5 (Runes) + Winit/Wry (Bare-Metal) + Tailwind v4.** UI estritamente passiva (Zero-VDOM). Frameworks baseados em Virtual DOM (React, Vue) estão **banidos** — a "Morte do Virtual DOM" é lei.
+5. **Overlay Fluido & Zero Layout Shift.** Desktop Acrylic nativo via Windows 11 DWM FFI (`DWMSBT_TRANSIENTWINDOW`), planaridade ortogonal e **GenUI Efêmera** (injeção de interface sem quebrar o espaço cognitivo). Micro-widgets com Container Queries (`@container inline-size`).
 6. **Memória Evolutiva (A Tríade).** L2 Episódico (SQLite WAL MVCC + FTS5) + L3 Semântico (LanceDB) + Grafos Ontológicos (LadybugDB / Kùzu). Toda mutação passa por **Event Sourcing** via *Gitoxide* (Rust) — o usuário nunca perde uma versão.
 7. **LLM Wiki (vs RAG).** Repúdio ao RAG de busca cega. A cognição opera sob o paradigma *LLM Wiki*, com **Logit Probing** direto em SLMs locais (Mistral.rs / llama-cpp-4 via AVX2) — zero gasto de VRAM gerando texto para julgar a realidade. Conflitos com crenças raiz disparam auditoria via *Cohomologia de Feixes* e distância *Fisher-Rao*.
 
@@ -38,33 +38,40 @@ O Souls MC repudia a execução de interpretadores pesados em *background* (Node
 
 ### Pré-requisitos
 - [Rust Toolchain](https://rustup.rs/) (`cargo`, `rustc`) — **obrigatório**.
-- [Node.js](https://nodejs.org/) (v20+ LTS) + **pnpm** — **somente para o shell do Tauri em modo dev**.
+- [Node.js](https://nodejs.org/) (v20+ LTS) + **pnpm** — **somente para o dev server do Vite**.
 - C++ Build Tools (MSVC no Windows) para crates com bindings C/C++ nativos (`crc32fast`, etc).
 
-### Setup
-1. Clone o repositório e instale as dependências de interface:
+### Setup & Execução
+1. Instale as dependências da interface:
    ```bash
    pnpm install
    ```
-2. Inicie o ambiente de desenvolvimento (Tauri Dev — HMR do shell Svelte + build do backend Rust simultâneo):
-   ```bash
-   pnpm tauri dev
+2. Inicie o ecossistema completo em modo desenvolvimento (Hot Reload + Chassi Bare-Metal):
+   ```powershell
+   ./boot.ps1 -Dev
    ```
-3. Build de produção — binário estático, sem dependências externas:
-   ```bash
-   cd src-tauri && cargo build --release
+3. Build de produção — binários nativos no Cargo Workspace:
+   ```powershell
+   ./boot.ps1 -Build
+   # ou
+   cargo build --release --workspace
    ```
 
 ---
 
 ## 📂 Topologia de Diretórios (Onde vive a inteligência)
 
-A estruturação é regida pelo **Spec-Driven Development (SDD)** e divisão estrita de responsabilidades.
+A estruturação é regida pelo **Spec-Driven Development (SDD)** e divisão estrita de responsabilidades no Cargo Workspace.
 
-- **`/src-tauri/`** — O **Coração Rust**. Toda a regra de negócio, IPC Zero-Copy, Harvester (F0–F5), SAST pipeline (semgrep / opengrep), MCP gateway (`souls_mcp_server`, `souls-agent-gateway`), persistência SQLite e gestão de subprocessos vive aqui.
-- **`/src/`** — O **Shell Svelte 5** (em transição do legado). Interface *Cyber-Purple*, Tiling 2D, GenUI Efêmera e ecossistema passivo do Canvas.
-- **`.agents/`** — O **Córtex de Contexto** dos Agentes.
-  - `rules/`: Leis de governança imutáveis e sintaxe (`project_rules.md`).
+- **`/crates/`** — O **Workspace Rust Multi-Crate**:
+  - `crates/souls_protocol/` — DTOs Serde serializáveis, envelopes IPC bidirecionais e contratos tipados.
+  - `crates/souls_core/` — Motor assíncrono Tokio puro (`CoreEngine`, telemetria 5Hz, Harvester, persistência, SAST e cognição).
+  - `crates/souls_ui_shell/` — Chassi gráfico nativo (Winit 0.30 + Wry 0.55 + DWM Desktop Acrylic Win32 FFI).
+  - `crates/anthropophagy/` — Motor de canibalização cognitiva, swarm multi-agente e síntese O(1).
+- **`/src/`** — O **Frontend Svelte 5**: Design System Apple Minimalist + Cyberpunk Sleek, micro-widgets e IPC reativo.
+- **`/resources/`, `/vendor/`, `/bin/`, `/models/`, `/data/`** — Recursos estáticos, gramáticas WASM e modelos locais.
+- **`.agents/`** — O **Córtex de Contexto** dos Agentes:
+  - `bin/`: Binários compilados para execução local (`souls_ui_shell.exe`, `souls_mcp_server.exe`, `agentgateway_tcp_proxy.exe`, `mcp_stdio_guard.exe`).
   - `skills/`: Ecossistema de habilidades em Markdown (`SKILL.md`) sob o princípio de **Divulgação Progressiva** (Progressive Disclosure).
 - **`/docs/`** — Memória Semântica de longo prazo.
   - `SOULS_CANON_MANIFEST.md` — **A Constituição**. Toda decisão arquitetural deve referenciá-la.

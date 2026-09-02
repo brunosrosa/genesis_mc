@@ -1,0 +1,116 @@
+[package]
+name = "souls_core"
+version = "0.1.0"
+edition = "2021"
+description = "Motor de negócios, telemetria, governança e persistência assíncrona do SOULS MC"
+
+[lib]
+name = "souls_mc_lib"
+crate-type = ["rlib"]
+
+[dependencies]
+souls_protocol = { path = "../souls_protocol" }
+
+# --- Workspace SSOT dependencies ---
+serde = { workspace = true }
+serde_json = { workspace = true }
+regex = { workspace = true }
+url = { workspace = true }
+toml = { workspace = true }
+dunce = { workspace = true }
+rustc-hash = { workspace = true }
+tinyrand = { workspace = true }
+uuid = { workspace = true }
+sha2 = { workspace = true }
+walkdir = { workspace = true }
+dashmap = { workspace = true }
+dotenvy = { workspace = true }
+enable-ansi-support = { workspace = true }
+ignore = { workspace = true }
+tokio = { workspace = true }
+reqwest = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+thiserror = { workspace = true }
+sysinfo = { workspace = true }
+rusqlite = { workspace = true }
+sqlparser = { workspace = true }
+tempfile = { workspace = true }
+zstd = { workspace = true }
+gix = { workspace = true }
+oxc = { workspace = true }
+quick-xml = { workspace = true }
+astral-tl = { workspace = true }
+bumpalo = { workspace = true }
+memmap2 = { workspace = true }
+pulldown-cmark = { workspace = true }
+jsonrepair = { workspace = true }
+httparse = { workspace = true }
+jsonwebtoken = { workspace = true }
+aho-corasick = { workspace = true }
+tiktoken = { workspace = true }
+tokenizers = { workspace = true }
+wasmtime = { workspace = true }
+wasmtime-wasi = { workspace = true }
+tree-sitter = { workspace = true }
+tree-sitter-c-sharp = { workspace = true }
+tree-sitter-yaml = { workspace = true }
+windows-sys = { workspace = true }
+arrow-array = { workspace = true }
+arrow-schema = { workspace = true }
+arrow-row = { workspace = true }
+arrow-cast = { workspace = true }
+futures-util = { workspace = true }
+similar = { workspace = true }
+which = { workspace = true }
+quote = { workspace = true }
+nvml-wrapper = { workspace = true }
+lancedb = { version = "0.30.0", default-features = false }
+mistralrs = { workspace = true, optional = true }
+llguidance = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+windows-projfs = { workspace = true }
+
+[dev-dependencies]
+mockito = { workspace = true }
+tempfile = { workspace = true }
+
+[features]
+default = []
+llama_upstream_backend = []
+mistral_backend = ["dep:mistralrs"]
+all_engines = ["llama_upstream_backend", "mistral_backend"]
+llama_backend = ["llama_upstream_backend"]
+ik_llama_backend = ["llama_upstream_backend"]
+grammar_backend = []
+gateway_ccr = []
+lora_adapter = []
+ik_llama_ffi = []
+
+[[bin]]
+name = "souls_mcp_server"
+path = "src/bin/souls_mcp_server/main.rs"
+
+[[bin]]
+name = "souls_vanguard_worker"
+path = "src/bin/souls_vanguard_worker.rs"
+required-features = ["llama_backend"]
+
+[[bin]]
+name = "agentgateway_tcp_proxy"
+path = "src/bin/agentgateway_tcp_proxy.rs"
+required-features = ["gateway_ccr"]
+
+[[bin]]
+name = "mcp_stdio_guard"
+path = "src/bin/mcp_stdio_guard.rs"
+required-features = ["gateway_ccr"]
+
+[[bin]]
+name = "souls_arena_cli"
+path = "src/bin/souls_arena_cli.rs"
+
+[[bin]]
+name = "soda_mcp_tester_cli"
+path = "src/bin/soda_mcp_tester_cli.rs"

@@ -5,9 +5,9 @@ Param(
 )
 
 # =============================================================================
-# SOULS MC (Mission Control) | SODA Bootstrap Soberano & Fusão Bare-Metal
+# SOULS MC (Mission Control) | SODA Bootstrap Soberano & Fusão Bare-Metal v6
 # Conformidade: ADR-001 (Core Stack), ADR-003 (Isolamento Stdio), 
-#               ADR-039 (Cargo FinOps) e ADR-047 (Isolamento pnpm)
+#               ADR-039 (Cargo FinOps) e ADR-041 (Servername Soberano souls_mcp)
 # =============================================================================
 
 # 1. Tratamento Estrito de Erros e Configuração de Terminal
@@ -29,8 +29,8 @@ $env:SOULS_CCR_MAX_RAM_MB = "256"
 $env:SOULS_HEADROOM_SAFETY_MARGIN = "512"
 $env:SOULS_HEADROOM_OUTPUT_BUFFER = "4096"
 
-# Telemetria e Logs cirúrgicos (Silencia >600 linhas de ruído de crates transitivas)
-$env:RUST_LOG = "souls_mc_lib=info,souls_sast=debug,souls_harvester=debug,headroom_engine=debug,llama_engine=info,hardware_profiler=info,model_manager=debug,souls_ccr=debug,ignore=warn,globset=warn,walkdir=warn"
+# Telemetria e Logs cirúrgicos (Silencia ruídos de crates transitivas)
+$env:RUST_LOG = "souls_ui_shell=info,souls_core=debug,souls_protocol=info,souls_mc_lib=info,souls_sast=debug,souls_harvester=debug,headroom_engine=debug,llama_engine=info,hardware_profiler=info,model_manager=debug,souls_ccr=debug,ignore=warn,globset=warn,walkdir=warn"
 
 # Configuração Persistente do Sccache em Dev Drive Z:
 $sccacheExe = (Get-Command sccache.exe -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Source)
@@ -69,15 +69,17 @@ if (!(Test-Path $gpuPrefRegKey)) {
     New-Item -Path $gpuPrefRegKey -Force | Out-Null
 }
 $targetExes = @(
+    (Join-Path $PSScriptRoot "target\release\souls_ui_shell.exe"),
+    (Join-Path $PSScriptRoot "target\debug\souls_ui_shell.exe"),
+    (Join-Path $PSScriptRoot ".agents\bin\souls_ui_shell.exe"),
     (Join-Path $PSScriptRoot "target\release\souls_mc.exe"),
     (Join-Path $PSScriptRoot "target\debug\souls_mc.exe"),
-    (Join-Path $PSScriptRoot ".agents\bin\souls_mc.exe"),
-    (Join-Path $PSScriptRoot "src-tauri\target\release\souls_mc.exe")
+    (Join-Path $PSScriptRoot ".agents\bin\souls_mc.exe")
 )
 foreach ($exe in $targetExes) {
     Set-ItemProperty -Path $gpuPrefRegKey -Name $exe -Value "GpuPreference=1;" -Type String -ErrorAction SilentlyContinue
 }
-Write-Host "[GPU-FINOPS] WebView2 e souls_mc ancorados na iGPU (GpuPreference=1; / RTX 2060m 100% blindada para CUDA)" -ForegroundColor DarkGreen
+Write-Host "[GPU-FINOPS] WebView2 e souls_ui_shell ancorados na iGPU (GpuPreference=1; / RTX 2060m 100% blindada para CUDA)" -ForegroundColor DarkGreen
 
 # Patch idempotente vendor/llama-cpp-sys-2 (Evita quebra de sccache + NVCC)
 $vendorLlamaCmake = Join-Path $PSScriptRoot "src-tauri\vendor\llama-cpp-sys-2\llama.cpp\ggml\CMakeLists.txt"
@@ -91,31 +93,14 @@ if (Test-Path $vendorLlamaCmake) {
     }
 }
 
-# Patch idempotente ik-llama-cpp-sys (Satisfaz o git rev-parse em caches sem .git)
-$ikLlamaCrateRoot = Join-Path $env:USERPROFILE ".cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ik-llama-cpp-sys-*"
-$ikLlamaDir = Get-Item -Path $ikLlamaCrateRoot -ErrorAction SilentlyContinue | Select-Object -First 1
-if ($ikLlamaDir) {
-    $gitDir = Join-Path $ikLlamaDir.FullName "ik_llama.cpp\.git"
-    if (-not (Test-Path $gitDir)) {
-        Push-Location $ikLlamaDir.FullName\ik_llama.cpp
-        try {
-            git init -q
-            git -c user.email=souls@souls_mc -c user.name=SOULS commit --allow-empty -m "souls-mc placeholder" -q 2>$null
-            Write-Host "[PATCH] ik-llama-cpp-sys/ik_llama.cpp git init aplicado para evitar erros de rev-parse." -ForegroundColor DarkGreen
-        } catch {
-            Write-Host "[PATCH-SKIP] git init falhou ou ignorado: $_" -ForegroundColor DarkYellow
-        } finally {
-            Pop-Location
-        }
-    }
-}
-
 # =============================================================================
 # BLOCO B: QUARENTENA EXPANSA DE PROCESSOS & HIGIENE WEBVIEW2
 # =============================================================================
 
 Write-Host "`n[SOULS] Varrendo e higienizando processos e sidecars antigos..." -ForegroundColor Yellow
 $zombies = @(
+    "souls_ui_shell",
+    "souls-ui-shell",
     "agentgateway", 
     "agentgateway_tcp_proxy", 
     "souls_mc", 
@@ -136,6 +121,18 @@ foreach ($z in $zombies) {
         Stop-Process -Name $z -Force -ErrorAction SilentlyContinue
     }
 }
+
+# Purga de instâncias msedgewebview2 órfãs
+$orphanedWebviews = Get-Process -Name "msedgewebview2" -ErrorAction SilentlyContinue | Where-Object {
+    $_.MainWindowHandle -eq 0 -and ($_.CPU -gt 10 -or $null -eq $_.Parent)
+}
+if ($orphanedWebviews) {
+    foreach ($wv in $orphanedWebviews) {
+        Stop-Process -Id $wv.Id -Force -ErrorAction SilentlyContinue
+        $killed += [PSCustomObject]@{ Name = "msedgewebview2 (orphan)"; Pids = $wv.Id }
+    }
+}
+
 Start-Sleep -Milliseconds 500
 if ($killed.Count -gt 0) {
     foreach ($k in $killed) {
@@ -150,6 +147,7 @@ $webviewDataDirs = @(
     (Join-Path $env:LOCALAPPDATA "com.rosas.souls-mc\EBWebView"),
     (Join-Path $env:LOCALAPPDATA "souls-mc\EBWebView"),
     (Join-Path $PSScriptRoot "target\release\EBWebView"),
+    (Join-Path $PSScriptRoot "target\debug\EBWebView"),
     (Join-Path $PSScriptRoot "src-tauri\target\release\EBWebView")
 )
 if ($CleanWebview -or $Build -or (-not $Dev)) {
@@ -175,20 +173,27 @@ if ($Build) {
     # 1. Compilação dos assets frontend via Vite
     Write-Host "[SOULS] Compilando frontend assets Svelte 5 via Vite..." -ForegroundColor Cyan
     pnpm run build
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "[ERRO CRÍTICO] Build do frontend falhou!" -ForegroundColor Red
+        exit $LASTEXITCODE
+    }
     
-    # 2. Compilação Rust Release dos 4 daemons de infraestrutura
-    Write-Host "[SOULS] Compilando 4 daemons Rust em modo Release (tauri-app, gateway_ccr)..." -ForegroundColor Cyan
+    # 2. Compilação Rust Release dos 4 daemons de infraestrutura do Workspace
+    Write-Host "[SOULS] Compilando daemons Rust em modo Release (souls_ui_shell, souls_mcp_server, agentgateway_tcp_proxy)..." -ForegroundColor Cyan
     Push-Location $PSScriptRoot
     try {
-        cargo build --release `
-            --package "souls_mc" `
-            --features "tauri-app,gateway_ccr" `
-            --bin "souls_mc" `
+        cargo build --release -p souls_ui_shell --bin "souls_ui_shell"
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "[ERRO CRÍTICO] Compilação do souls_ui_shell falhou com Exit Code $LASTEXITCODE!" -ForegroundColor Red
+            exit $LASTEXITCODE
+        }
+        cargo build --release -p souls_core `
             --bin "souls_mcp_server" `
             --bin "agentgateway_tcp_proxy" `
-            --bin "mcp_stdio_guard"
+            --bin "mcp_stdio_guard" `
+            --features "gateway_ccr"
         if ($LASTEXITCODE -ne 0) {
-            Write-Host "[ERRO CRÍTICO] Compilação do Cargo falhou com Exit Code $LASTEXITCODE!" -ForegroundColor Red
+            Write-Host "[ERRO CRÍTICO] Compilação dos daemons souls_core falhou com Exit Code $LASTEXITCODE!" -ForegroundColor Red
             exit $LASTEXITCODE
         }
     } finally {
@@ -202,7 +207,7 @@ if ($Build) {
     }
     
     Write-Host "[SOULS] Transplantando executáveis para .agents/bin/..." -ForegroundColor Cyan
-    $daemons = @("souls_mc.exe", "souls_mcp_server.exe", "agentgateway_tcp_proxy.exe", "mcp_stdio_guard.exe")
+    $daemons = @("souls_ui_shell.exe", "souls_mcp_server.exe", "agentgateway_tcp_proxy.exe", "mcp_stdio_guard.exe")
     foreach ($daemon in $daemons) {
         $sourcePath = Join-Path $PSScriptRoot "target\release\$daemon"
         if (Test-Path $sourcePath) {
@@ -253,11 +258,18 @@ if ($Dev) {
         exit 1
     }
     
-    Write-Host "[SOULS] Localhost ativo! Disparando janela de debug..." -ForegroundColor Green
-    $debugPath = Join-Path $PSScriptRoot "target\debug\souls_mc.exe"
+    Write-Host "[SOULS] Localhost ativo! Verificando binário de debug do souls_ui_shell..." -ForegroundColor Green
+    $debugPath = Join-Path $PSScriptRoot "target\debug\souls_ui_shell.exe"
     if (-not (Test-Path $debugPath)) {
-        $debugPath = Join-Path $PSScriptRoot "target\release\souls_mc.exe"
+        $debugPath = Join-Path $PSScriptRoot "target\release\souls_ui_shell.exe"
     }
+    if (-not (Test-Path $debugPath)) {
+        Write-Host "[SOULS] Compilando souls_ui_shell em modo debug..." -ForegroundColor Cyan
+        cargo build -p souls_ui_shell
+        $debugPath = Join-Path $PSScriptRoot "target\debug\souls_ui_shell.exe"
+    }
+    
+    $env:SOULS_DEV_URL = "http://localhost:1420"
     Start-Process $debugPath
     
 } else {
@@ -265,12 +277,12 @@ if ($Dev) {
     # BLOCO D: INICIALIZAÇÃO DE PRODUÇÃO (Standalone Offline)
     # -------------------------------------------------------------------------
     $agentsBinDir = Join-Path $PSScriptRoot ".agents\bin"
-    $daemonPath = Join-Path $agentsBinDir "souls_mc.exe"
+    $daemonPath = Join-Path $agentsBinDir "souls_ui_shell.exe"
     $proxyPath = Join-Path $agentsBinDir "agentgateway_tcp_proxy.exe"
     
     # Fallback paths
     if (-not (Test-Path $daemonPath)) {
-        $daemonPath = Join-Path $PSScriptRoot "target\release\souls_mc.exe"
+        $daemonPath = Join-Path $PSScriptRoot "target\release\souls_ui_shell.exe"
     }
     if (-not (Test-Path $proxyPath)) {
         $proxyPath = Join-Path $PSScriptRoot "target\release\agentgateway_tcp_proxy.exe"
@@ -284,10 +296,10 @@ if ($Dev) {
     
     Write-Host "`n[SOULS] Disparando ecossistema standalone de produção..." -ForegroundColor Green
     
-    # 1. Disparo do Tray Daemon (souls_mc.exe)
-    Write-Host "[DAEMON] Iniciando Tray Daemon (souls_mc.exe)..." -ForegroundColor Cyan
+    # 1. Disparo do Chassi Gráfico Bare-Metal (souls_ui_shell.exe)
+    Write-Host "[CHASSIS] Iniciando souls_ui_shell.exe (Windows 11 DWM Desktop Acrylic)..." -ForegroundColor Cyan
     $daemonProc = Start-Process -FilePath $daemonPath -WorkingDirectory $PSScriptRoot -PassThru
-    Write-Host ("[DAEMON] souls_mc iniciado (PID: {0})" -f $daemonProc.Id) -ForegroundColor DarkCyan
+    Write-Host ("[CHASSIS] souls_ui_shell iniciado (PID: {0})" -f $daemonProc.Id) -ForegroundColor DarkCyan
     
     # 2. Disparo Soberano do Proxy L7 (agentgateway_tcp_proxy.exe :3001)
     if (Test-Path $proxyPath) {
@@ -319,15 +331,15 @@ if ($Dev) {
         
         if ($proxyReady) {
             Write-Host "`n=======================================================" -ForegroundColor Green
-            Write-Host " 🚀 SOULS MC ONLINE & PRONTO! (Proxy L7 :3001 Ativo)" -ForegroundColor Green
-            Write-Host " Interface Svelte 5 offline carregada nativamente via tauri://localhost" -ForegroundColor Gray
+            Write-Host " 🚀 SOULS MC ONLINE & PRONTO! (Proxy L7 :3001 & DWM Acrylic Ativos)" -ForegroundColor Green
+            Write-Host " Interface Svelte 5 executando sob Winit + Wry Bare-Metal (0.0% GPU Idle)" -ForegroundColor Gray
             Write-Host "=======================================================\n" -ForegroundColor Green
         } else {
             Write-Host "[AVISO] Proxy L7 iniciado, mas a porta 3001 demorou a responder ao probe." -ForegroundColor DarkYellow
         }
     } else {
         Write-Host "`n=======================================================" -ForegroundColor Green
-        Write-Host " 🚀 SOULS MC ONLINE & PRONTO! (Tray Daemon Ativo)" -ForegroundColor Green
+        Write-Host " 🚀 SOULS MC ONLINE & PRONTO! (Chassi Bare-Metal Ativo)" -ForegroundColor Green
         Write-Host "=======================================================\n" -ForegroundColor Green
     }
 }

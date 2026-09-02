@@ -1,0 +1,47 @@
+rules:
+  - id: souls.rust.panic.unwrap.expect
+    languages: [rust]
+    severity: WARNING
+    message: "panic/unwrap/expect aumentam fragilidade operacional"
+    pattern-either:
+      - pattern: panic!(...)
+      - pattern: $VALUE.unwrap()
+      - pattern: $VALUE.expect(...)
+
+  - id: souls.rust.temp-dir
+    languages: [rust]
+    severity: WARNING
+    message: "Uso de diretorio temporario requer auditoria de seguranca e higiene de cleanup"
+    pattern-either:
+      - pattern: std::env::temp_dir()
+      - pattern: env::temp_dir()
+      - pattern: tempfile::tempdir()
+      - pattern: tempfile::Builder::new()
+
+  - id: souls.python.temp-dir
+    languages: [python]
+    severity: WARNING
+    message: "Uso de diretorio temporario requer auditoria de seguranca e cleanup"
+    pattern-either:
+      - pattern: tempfile.TemporaryDirectory(...)
+      - pattern: tempfile.NamedTemporaryFile(...)
+      - pattern: tempfile.mkstemp(...)
+      - pattern: tempfile.mkdtemp(...)
+
+  - id: souls.go.temp-dir
+    languages: [go]
+    severity: WARNING
+    message: "Uso de diretorio temporario requer auditoria de seguranca e cleanup"
+    pattern-either:
+      - pattern: os.MkdirTemp(...)
+      - pattern: os.CreateTemp(...)
+      - pattern: ioutil.TempDir(...)
+      - pattern: ioutil.TempFile(...)
+
+  - id: souls.elixir.temp-dir
+    languages: [elixir]
+    severity: WARNING
+    message: "Uso de diretorio temporario requer auditoria de seguranca e cleanup"
+    pattern-either:
+      - pattern: System.tmp_dir!()
+      - pattern: Briefly.create(...)

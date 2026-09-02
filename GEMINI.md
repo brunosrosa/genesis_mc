@@ -19,7 +19,7 @@ O fluxo obrigatório para novas lógicas é solicitar ao usuário o comando `/gr
 ## 3. STACK TECNOLÓGICA (LEI DE FERRO)
 - **Backend:** Exclusivamente Rust (Tokio). Otimizado para AVX2 e limite rígido de 6GB VRAM (RTX 2060m).
 - **Frontend:** Svelte 5 (Runes) + Tailwind CSS v4. Arquitetura passiva (Zero-VDOM). Nenhuma lógica de negócios reside no frontend.
-- **Comunicação:** Tauri v2 via IPC Zero-Copy (ArrayBuffer/Raw Payloads). Serialização JSON pesada é proibida.
+- **Comunicação:** IPC Zero-Copy assíncrono Tokio via Wry/Winit (`window.ipc.postMessage` / `evaluate_script`). Serialização redundante e intermediários desnecessários são proibidos.
 
 ## 4. AMBIENTE E GOVERNANÇA (FÁBRICA VS PRODUTO)
 - No seu ambiente de Dev (Shadow Workspaces), você pode usar Python, Docker e ferramentas efêmeras para testes ou ETL Cognitivo.

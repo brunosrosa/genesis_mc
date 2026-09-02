@@ -1,0 +1,132 @@
+rules:
+  - id: souls.rust.unsafe.block
+    languages: [rust]
+    severity: WARNING
+    message: "Rust unsafe block requer auditoria manual"
+    pattern: unsafe { ... }
+
+  - id: souls.rust.transmute
+    languages: [rust]
+    severity: ERROR
+    message: "std::mem::transmute amplia risco de memory-unsafety"
+    pattern: std::mem::transmute(...)
+
+  - id: souls.rust.from-raw-parts
+    languages: [rust]
+    severity: ERROR
+    message: "Construcao a partir de raw pointer requer auditoria de memoria"
+    pattern-either:
+      - pattern: std::slice::from_raw_parts(...)
+      - pattern: std::slice::from_raw_parts_mut(...)
+      - pattern: std::str::from_utf8_unchecked(...)
+
+  - id: souls.javascript.dynamic-eval
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "Execucao dinamica via eval aumenta risco de injecao"
+    pattern: eval(...)
+
+  - id: souls.javascript.function-constructor
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "Function constructor amplia superficie de code injection"
+    pattern: new Function(...)
+
+  - id: souls.javascript.command-injection
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "child_process com shell/exec amplia risco de command injection"
+    pattern-either:
+      - pattern: require("child_process").exec(...)
+      - pattern: require("child_process").execSync(...)
+      - pattern: require("child_process").spawn(..., { ..., shell: true, ... })
+      - pattern: require("child_process").spawnSync(..., { ..., shell: true, ... })
+
+  - id: souls.javascript.xss-innerhtml
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "innerHTML com dados dinamicos amplia risco de XSS"
+    pattern: $TARGET.innerHTML = $VALUE
+
+  - id: souls.python.dynamic-eval
+    languages: [python]
+    severity: ERROR
+    message: "Execucao dinamica via eval aumenta risco de injecao"
+    pattern: eval(...)
+
+  - id: souls.python.dynamic-exec
+    languages: [python]
+    severity: ERROR
+    message: "Execucao dinamica via exec aumenta risco de injecao"
+    pattern: exec(...)
+
+  - id: souls.python.subprocess-shell
+    languages: [python]
+    severity: ERROR
+    message: "subprocess com shell=True aumenta superficie de command injection"
+    pattern: subprocess.$FUNC(..., shell=True, ...)
+
+  - id: souls.python.pickle-loads
+    languages: [python]
+    severity: ERROR
+    message: "pickle em dados nao confiaveis amplia risco de code execution"
+    pattern-either:
+      - pattern: pickle.load(...)
+      - pattern: pickle.loads(...)
+
+  - id: souls.python.yaml-load
+    languages: [python]
+    severity: ERROR
+    message: "yaml.load sem safe loader amplia risco de deserialization insegura"
+    pattern: yaml.load(...)
+
+  - id: souls.go.exec-command
+    languages: [go]
+    severity: ERROR
+    message: "exec.Command requer auditoria contra command injection"
+    pattern-either:
+      - pattern: exec.Command(...)
+      - pattern: exec.CommandContext(...)
+
+  - id: souls.go.sql-string-format
+    languages: [go]
+    severity: ERROR
+    message: "Formatacao dinamica de SQL amplia risco de SQL injection"
+    pattern-either:
+      - pattern: fmt.Sprintf("SELECT ..." , ...)
+      - pattern: fmt.Sprintf("INSERT ..." , ...)
+      - pattern: fmt.Sprintf("UPDATE ..." , ...)
+      - pattern: fmt.Sprintf("DELETE ..." , ...)
+
+  - id: souls.ruby.dynamic-eval
+    languages: [ruby]
+    severity: ERROR
+    message: "Kernel.eval amplia risco de code injection"
+    pattern-either:
+      - pattern: eval(...)
+      - pattern: Kernel.eval(...)
+
+  - id: souls.ruby.command-injection
+    languages: [ruby]
+    severity: ERROR
+    message: "exec/system/Open3 ampliam risco de command injection"
+    pattern-either:
+      - pattern: exec(...)
+      - pattern: system(...)
+      - pattern: Open3.capture2(...)
+      - pattern: Open3.capture2e(...)
+      - pattern: Open3.capture3(...)
+
+  - id: souls.elixir.dynamic-eval
+    languages: [elixir]
+    severity: ERROR
+    message: "Code.eval_* amplia risco de execucao dinamica"
+    pattern-either:
+      - pattern: Code.eval_string(...)
+      - pattern: Code.eval_quoted(...)
+
+  - id: souls.generic.hardcoded-secret
+    languages: [generic]
+    severity: ERROR
+    message: "Possivel segredo hardcoded"
+    pattern-regex: '(?i)(api[_-]?key|secret|token|password|access[_-]?token|client[_-]?secret|aws_access_key_id|aws_secret_access_key)\s*[:=]\s*["'']?[A-Za-z0-9_/\-+=]{12,}["'']?'

@@ -1,8 +1,10 @@
 [workspace]
 resolver = "2"
 members = [
-    "src-tauri",
-    "src-tauri/crates/anthropophagy",
+    "crates/souls_protocol",
+    "crates/souls_core",
+    "crates/souls_ui_shell",
+    "crates/anthropophagy",
 ]
 
 # =============================================================================
@@ -85,7 +87,14 @@ windows-sys = { version = "=0.61.2", features = [
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_System_SystemInformation",
     "Win32_UI_WindowsAndMessaging",
+    "Win32_Graphics_Dwm",
+    "Win32_System_Com",
 ] }
+
+# --- Wry & Winit (Bare-Metal Desktop Shell) ---
+wry = "0.55"
+winit = "0.30"
+raw-window-handle = "0.6"
 
 # --- Arrow (vector / LanceDB stack) ---
 arrow-array = "=58.4.0"
@@ -100,10 +109,7 @@ which = "=6.0.3"
 quote = "=1.0.46"
 nvml-wrapper = "0.10.0"
 
-# --- Tauri ---
-tauri = { version = "=2.11.5", features = ["tray-icon", "custom-protocol"] }
-tauri-plugin-opener = { version = "=2.5.4" }
-tauri-build = { version = "=2.6.3" }
+# --- Windows ProjFS ---
 windows-projfs = "=0.1.8"
 
 # --- ML Inference ---

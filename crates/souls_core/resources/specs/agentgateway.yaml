@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=https://agentgateway.dev/schema/config
+config: {}
+binds:
+  - port: 3001
+    listeners:
+      - protocol: HTTP
+        routes:
+          - policies:
+              cors:
+                allowOrigins: ['*']
+                allowHeaders: ['*']
+                exposeHeaders: ['Mcp-Session-Id']
+            backends:
+              - mcp:
+                  targets:
+                    - name: souls_mcp
+                      stdio:
+                        # Marco 4.1.2: Runtime desacoplado de target/debug/
+                        # (Fim dos travamentos NTFS durante `cargo build`).
+                        # O `boot.ps1` transplanta os 3 .exe para
+                        # `.agents/bin/` no step 1.5/5.
+                        cmd: 'Z:/souls_mc/.agents/bin/souls_mcp_server.exe'

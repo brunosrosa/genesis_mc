@@ -27,9 +27,11 @@ dist-ssr
 */tmp/*
 .agents/scratch/*/
 
-# Marco 4.1.2: Runtime desacoplado. Os .exe transplantados pelo boot.ps1
-# sao artefatos de build (NAO fonte). Proibido comitar binarios de 100+MB.
+# Binários e Sidecars
 .agents/bin/
+bin/
+**/bin/*.exe
+*.exe
 
 # Outros arquivos e diretórios
 .souls_data/
@@ -41,7 +43,12 @@ dist-ssr
 .pytest_cache/
 __pycache__/
 *.pyc
-src-tauri/models/
+models/
+**/models/
+*.onnx
+*.onnx.data
+crates/**/models/
+crates/**/vendor/
 docs/observability/audits/
 docs/observability/context_dumps/
 
@@ -49,28 +56,27 @@ docs/observability/context_dumps/
 # SOULS BARE-METAL: BLINDAGEM DA PASTA VENDOR CONTRA LIXO DE COMPILAÇÃO
 # ==============================================================================
 # Ignora caches e diretórios de saída de compilação do Rust e CMake dentro de vendor
-src-tauri/vendor/**/target/
-src-tauri/vendor/**/build/
-src-tauri/vendor/**/bin/
-src-tauri/vendor/**/out/
+vendor/**/target/
+vendor/**/build/
+vendor/**/bin/
+vendor/**/out/
 target/
-src-tauri/target/
 
 # Ignora arquivos binários e objetos intermediários do compilador C++ (MSVC/NVCC)
-src-tauri/vendor/**/*.o
-src-tauri/vendor/**/*.obj
-src-tauri/vendor/**/*.a
-src-tauri/vendor/**/*.lib
-src-tauri/vendor/**/*.so
-src-tauri/vendor/**/*.dylib
-src-tauri/vendor/**/*.dll
-src-tauri/vendor/**/*.pdb
+vendor/**/*.o
+vendor/**/*.obj
+vendor/**/*.a
+vendor/**/*.lib
+vendor/**/*.so
+vendor/**/*.dylib
+vendor/**/*.dll
+vendor/**/*.pdb
 
 # Ignora arquivos de controle de geração do CMake
-src-tauri/vendor/**/CMakeCache.txt
-src-tauri/vendor/**/CMakeFiles/
-src-tauri/vendor/**/cmake_install.cmake
-src-tauri/vendor/**/Makefile
+vendor/**/CMakeCache.txt
+vendor/**/CMakeFiles/
+vendor/**/cmake_install.cmake
+vendor/**/Makefile
 docs/observability/context_dumps/_ADRs_ALL.txt
 docs/observability/context_dumps/_ENV_CLEAN.txt
 docs/observability/context_dumps/_IGNITION_SCRIPTS.txt
@@ -82,7 +88,7 @@ docs/observability/context_dumps/_SKILLS_IN_IDEs.txt
 docs/observability/context_dumps/_WOKSPACE_MAP.txt
 docs/observability/context_dumps/_WORKSPACE_MAP.txt
 docs/observability/context_dumps/_YAML_AgentGateway_e_souls_mcp_server.rs.txt
-src-tauri/vendor/ik-llama-cpp-sys/ik_llama.cpp/
+vendor/ik-llama-cpp-sys/ik_llama.cpp/
 
 # pnpm caches
 .pnpm-store/

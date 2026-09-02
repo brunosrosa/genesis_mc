@@ -1,43 +1,36 @@
 @import "tailwindcss";
 
 /* =========================================================================
-   SOULS MC SODA Canvas v0.1 — Tokens de Design (Cyber-Neuro Synthesis)
+   SOULS MC SODA Canvas — Apple Minimalist + Cyberpunk Sleek Design System
    Conformidade: ADR-001, ADR-005, ADR-010, ADR-013, ADR-014, ADR-025, ADR-041.
+   Zero CSS blur (Composição 100% nativa via Windows 11 DWM Desktop Acrylic).
    ========================================================================= */
 
 @theme {
-  --color-void: oklch(0% 0 0);
-  --color-void-black: oklch(0.12 0 0);
-  --color-surface-low: #111015;
-  --color-surface-mid: #17151F;
-  --color-surface-high: #242030;
-  --color-cyber-purple: oklch(0.65 0.3 300);
-  --color-cyber-dim: #8455EF;
-  --color-telemetry-cyan: oklch(0.75 0.15 200);
-  --color-alert-crimson: oklch(0.55 0.25 20);
-  --color-text-main: #E5E2E3;
-  --color-text-muted: #8E8997;
+  --color-void: oklch(0.12 0 0);
+  --color-void-black: #060508;
+  --color-surface-low: rgba(10, 9, 15, 0.55);
+  --color-surface-mid: rgba(16, 14, 24, 0.65);
+  --color-surface-high: rgba(26, 23, 38, 0.75);
 
-  --color-substrate: oklch(0% 0 0);
-  --color-substrate-glass: oklch(0.04 0 0 / 75%);
-  --color-panel-glass: oklch(0.08 0 0 / 65%);
-  --color-panel-elevated: oklch(0.12 0 0 / 80%);
+  --color-digital-cyan: #00E5FF;
+  --color-ethereal-lilac: #BA9EFF;
+  --color-studio-amber: #F59E0B;
+  --color-alert-crimson: #FF0055;
 
-  --color-foreground: oklch(0.985 0 0);
-  --color-foreground-muted: oklch(0.65 0 0);
-  --color-foreground-dim: oklch(0.40 0 0);
+  --color-text-main: #F2EFF2;
+  --color-text-muted: #9E9AA7;
+  --color-text-dim: #605B6C;
 
-  --color-neon-purple: oklch(0.65 0.28 296);
-  --color-neon-cyan: oklch(0.75 0.20 200);
-  --color-neon-orange: oklch(0.70 0.18 50);
-  --color-neon-green: oklch(0.78 0.20 145);
-  --color-neon-crimson: oklch(0.60 0.25 25);
+  --color-substrate-glass: rgba(8, 7, 12, 0.45);
+  --color-panel-glass: rgba(15, 13, 22, 0.60);
+  --color-panel-elevated: rgba(24, 21, 35, 0.75);
 
   --font-sans: "Inter", -apple-system, system-ui, sans-serif;
   --font-body: "Inter", -apple-system, system-ui, sans-serif;
   --font-headline: "Space Grotesk", sans-serif;
   --font-display: "Space Grotesk", sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
+  --font-mono: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
   --font-telemetry: "Doto", "Space Mono", "JetBrains Mono", monospace;
 
   --ease-tactile: cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -45,14 +38,15 @@
 }
 
 :root {
-  --background: oklch(0% 0 0);
-  --foreground: #E5E2E3;
-  --muted: #17151F;
-  --muted-foreground: #8E8997;
+  --background: transparent;
+  --foreground: #F2EFF2;
+  --muted: rgba(16, 14, 24, 0.65);
+  --muted-foreground: #9E9AA7;
   --border: rgba(255, 255, 255, 0.08);
-  --accent: oklch(0.65 0.3 300);
+  --accent-cyan: #00E5FF;
+  --accent-lilac: #BA9EFF;
   --compiling: #F59E0B;
-  --idle: #242030;
+  --idle: #1A1726;
   --font-sans: "Inter", system-ui, -apple-system, sans-serif;
   --font-display: "Space Grotesk", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
@@ -69,7 +63,8 @@ html,
 body {
   margin: 0;
   overflow: hidden;
-  background-color: oklch(0% 0 0);
+  background: transparent !important;
+  background-color: transparent !important;
   height: 100vh;
   width: 100vw;
   color: var(--foreground);
@@ -82,7 +77,7 @@ body {
 }
 
 /* =========================================================================
-   A Gaiola Ortogonal Indestrutível (CSS Grid Puro)
+   A Gaiola Ortogonal Indestrutível (CSS Grid Puro com DWM Acrylic Pass-Through)
    ========================================================================= */
 .cockpit-grid {
   display: grid;
@@ -95,172 +90,153 @@ body {
   height: 100vh;
   width: 100vw;
   overflow: hidden;
+  background: rgba(8, 7, 12, 0.50);
 }
 
 /* =========================================================================
-   Cyber-Grid Background
-   ========================================================================= */
-.cyber-grid {
-  background-image: 
-    radial-gradient(circle at 50% 30%, #17111b 0%, #08080A 70%),
-    linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
-  background-size: 100% 100%, 20px 20px, 20px 20px;
-}
-
-.cyber-grid-dense {
-  background-image: 
-    linear-gradient(to right, rgba(186, 158, 255, 0.03) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(186, 158, 255, 0.03) 1px, transparent 1px);
-  background-size: 12px 12px;
-}
-
-/* =========================================================================
-   Ghost Borders — Pintura direta na GPU via Inset Shadow (Zero Layout Shift).
+   Micro-Ghost Borders (1px com 8% a 15% de opacidade para simulação de refração)
    ========================================================================= */
 .ghost-border {
-  border: 1px solid rgba(186, 158, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .ghost-border-active {
-  border: 1px solid rgba(186, 158, 255, 0.6);
-  box-shadow: 0 0 12px rgba(186, 158, 255, 0.25);
+  border: 1px solid rgba(0, 229, 255, 0.45);
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.20);
+}
+
+.ghost-border-lilac {
+  border: 1px solid rgba(186, 158, 255, 0.35);
+  box-shadow: 0 0 10px rgba(186, 158, 255, 0.15);
 }
 
 .ghost-border-cyan {
-  border: 1px solid rgba(97, 194, 255, 0.25);
-}
-
-.octagon-cut {
-  clip-path: polygon(6px 0, calc(100% - 6px) 0, 100% 6px, 100% calc(100% - 6px), calc(100% - 6px) 100%, 6px 100%, 0 calc(100% - 6px), 0 6px);
+  border: 1px solid rgba(0, 229, 255, 0.30);
 }
 
 /* =========================================================================
-   Soul Agent Pip Pulse Animation (Otimizado para iGPU)
+   Sleek Sci-Fi Glows & Status Dots
    ========================================================================= */
-@keyframes soul-pulse {
+@keyframes diffuse-glow-pulse {
   0%, 100% {
+    opacity: 0.75;
     transform: scale(1);
-    opacity: 0.8;
   }
   50% {
-    transform: scale(1.1);
     opacity: 1;
+    transform: scale(1.08);
   }
 }
 
-.soul-pip {
-  animation: soul-pulse 3s infinite ease-in-out;
-  box-shadow: 0 0 6px #BA9EFF;
+.glow-dot-cyan {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #00E5FF;
+  box-shadow: 0 0 8px #00E5FF;
+}
+
+.glow-dot-lilac {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #BA9EFF;
+  box-shadow: 0 0 8px #BA9EFF;
+}
+
+.glow-dot-pulse {
+  animation: diffuse-glow-pulse 3s infinite ease-in-out;
 }
 
 /* =========================================================================
-   Cyber-Glass Panels (Acrylic / Mica - Otimizado para iGPU)
+   Flat Acrylic Panels (100% Flat com Zero-Blur para 0% GPU load)
    ========================================================================= */
-.cyber-panel {
-  background: rgba(23, 21, 31, 0.88);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+.flat-acrylic-panel {
+  background: rgba(14, 13, 20, 0.60);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 0.5rem;
   contain: layout style paint;
 }
 
-.cyber-panel-elevated {
-  background: rgba(36, 32, 48, 0.92);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  border: 1px solid rgba(186, 158, 255, 0.2);
-  box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.7);
+.flat-acrylic-elevated {
+  background: rgba(22, 19, 32, 0.75);
+  border: 1px solid rgba(186, 158, 255, 0.18);
+  box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.5);
   border-radius: 0.5rem;
   contain: layout style paint;
 }
 
-/* Transições com will-change ativo para otimização de iGPU */
+/* =========================================================================
+   CSS Container Queries (Contenção Unidirecional de Topo para Baixo)
+   ========================================================================= */
+.widget-box-wrapper {
+  container-type: inline-size;
+  container-name: widget-box;
+  width: 100%;
+  height: 100%;
+}
+
+/* Micro-Tier: Compact (< 280px) */
+@container widget-box (max-width: 279px) {
+  .widget-dense-hide {
+    display: none !important;
+  }
+  .widget-dense-title {
+    font-size: 0.70rem !important;
+    letter-spacing: 0.05em;
+  }
+  .widget-dense-value {
+    font-size: 1.1rem !important;
+  }
+}
+
+/* Micro-Tier: Standard (280px - 599px) */
+@container widget-box (min-width: 280px) and (max-width: 599px) {
+  .widget-dense-title {
+    font-size: 0.82rem !important;
+  }
+  .widget-dense-value {
+    font-size: 1.45rem !important;
+  }
+}
+
+/* Micro-Tier: Pro / Ultrawide (>= 600px) */
+@container widget-box (min-width: 600px) {
+  .widget-dense-title {
+    font-size: 0.95rem !important;
+  }
+  .widget-dense-value {
+    font-size: 1.85rem !important;
+  }
+}
+
+/* =========================================================================
+   Transições e Scrollbar de Precisão
+   ========================================================================= */
 .transition-tactile {
   transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
   transition-duration: 150ms;
 }
 
-.transition-tactile-fast {
-  transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
-  transition-duration: 50ms;
-}
-
-.gpu-transition {
-  will-change: transform, opacity, backdrop-filter;
-  transition-property: transform, opacity, backdrop-filter;
-  transition-duration: 150ms;
-  transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
-/* =========================================================================
-   Glow Slider — Controle tátil HITL GPU-accelerated.
-   ========================================================================= */
-.glow-slider {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 100%;
-  height: 6px;
-  border-radius: 999px;
-  background: #17151F;
-  outline: none;
-  cursor: ew-resize;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  transition: box-shadow 100ms cubic-bezier(0.2, 0.8, 0.2, 1);
-  contain: layout paint;
-}
-
-.glow-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 16px;
-  height: 16px;
-  border-radius: 999px;
-  background: #BA9EFF;
-  border: 2px solid #08080A;
-  cursor: grab;
-  box-shadow: 0 0 12px #BA9EFF;
-  transition: transform 75ms cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
-.glow-slider::-webkit-slider-thumb:active {
-  cursor: grabbing;
-  transform: scale(1.2);
-}
-
-.glow-slider::-moz-range-thumb {
-  width: 16px;
-  height: 16px;
-  border-radius: 999px;
-  background: #BA9EFF;
-  border: 2px solid #08080A;
-  cursor: grab;
-  box-shadow: 0 0 12px #BA9EFF;
-}
-
-/* =========================================================================
-   Selection & Scrollbar
-   ========================================================================= */
 ::selection {
-  background: rgba(186, 158, 255, 0.3);
-  color: #E5E2E3;
+  background: rgba(0, 229, 255, 0.25);
+  color: #FFFFFF;
 }
 
 ::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
+  width: 3px;
+  height: 3px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #08080A;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #242030;
-  border-radius: 0px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #8455EF;
+  background: #00E5FF;
 }
