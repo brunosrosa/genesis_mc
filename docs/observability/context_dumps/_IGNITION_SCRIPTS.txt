@@ -1,4 +1,4 @@
-_IGNITION_SCRIPTS Gerado em: 2026-08-24 20:08:22
+_IGNITION_SCRIPTS Gerado em: 2026-09-02 00:18:23
 
 ### ====================================================================================================
 ARQUIVO: boot.ps1
@@ -66,6 +66,25 @@ $env:CXXFLAGS = "/MD"
 $env:CMAKE_CUDA_ARCHITECTURES = "75"  # Pinho de arquitetura GPU para RTX 2060m (sm_75) acelerando o build em 10x
 Write-Host "[CUDA] GGML_CCACHE=OFF + CMAKE_CUDA_ARCHITECTURES=75 + /MD CRT injetados" -ForegroundColor DarkGreen
 
+# =============================================================================
+# BLOCO A.1: FORÇAR WEBVIEW2 NA iGPU & SUSPENSÃO NO SYSTRAY (0% GPU EM REPOUSO)
+# =============================================================================
+$env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--force_low_power_gpu --enable-low-power-gpu --enable-features=Calculators,BackgroundTabThrottling,IntensiveWakeUpThrottling,ThrottleDisplayNoneAndVisibilityHiddenCrossOriginIframes --disable-backgrounding-occluded-windows=false"
+$gpuPrefRegKey = "HKCU:\Software\Microsoft\DirectX\UserGpuPreferences"
+if (!(Test-Path $gpuPrefRegKey)) {
+    New-Item -Path $gpuPrefRegKey -Force | Out-Null
+}
+$targetExes = @(
+    (Join-Path $PSScriptRoot "target\release\souls_mc.exe"),
+    (Join-Path $PSScriptRoot "target\debug\souls_mc.exe"),
+    (Join-Path $PSScriptRoot ".agents\bin\souls_mc.exe"),
+    (Join-Path $PSScriptRoot "src-tauri\target\release\souls_mc.exe")
+)
+foreach ($exe in $targetExes) {
+    Set-ItemProperty -Path $gpuPrefRegKey -Name $exe -Value "GpuPreference=1;" -Type String -ErrorAction SilentlyContinue
+}
+Write-Host "[GPU-FINOPS] WebView2 e souls_mc ancorados na iGPU (GpuPreference=1; / RTX 2060m 100% blindada para CUDA)" -ForegroundColor DarkGreen
+
 # Patch idempotente vendor/llama-cpp-sys-2 (Evita quebra de sccache + NVCC)
 $vendorLlamaCmake = Join-Path $PSScriptRoot "src-tauri\vendor\llama-cpp-sys-2\llama.cpp\ggml\CMakeLists.txt"
 if (Test-Path $vendorLlamaCmake) {
@@ -106,6 +125,7 @@ $zombies = @(
     "agentgateway", 
     "agentgateway_tcp_proxy", 
     "souls_mc", 
+    "souls-mc",
     "mcp_stdio_guard", 
     "souls_mcp_server", 
     "sequential-thinking-server", 
@@ -320,7 +340,7 @@ if ($Dev) {
 
 ### ====================================================================================================
 ARQUIVO: souls_ETL_ignition.ps1
-CAMINHO: Z:\souls_mc\docs\scripts\souls_ETL_ignition.ps1
+CAMINHO: Z:\souls_mc\docs\runtime\scripts\souls_ETL_ignition.ps1
 ---
 # ==============================================================================
 # SOULS ETL IGNITION MATRIX V5 - ORQUESTRADOR BARE-METAL (JANELA DE VIDRO)

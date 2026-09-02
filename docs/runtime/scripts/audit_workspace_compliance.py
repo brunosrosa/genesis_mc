@@ -47,6 +47,7 @@ CANONICAL_ZONES: dict[str, list[str]] = {
     ],
     "ZONA 2 - Estado & Cache (gitignored)": [
         ".souls_data/", ".souls_cache/", ".souls_sandbox/", ".souls_scratchpad/",
+        ".souls/",
     ],
     "ZONA 3 - Cânone (raiz)": [
         "docs/",
@@ -58,6 +59,9 @@ CANONICAL_ZONES: dict[str, list[str]] = {
         "src-tauri/icons/", "src-tauri/.gitignore", "src-tauri/vendor/",
         "src-tauri/capabilities/", "src-tauri/examples/",
         "src-tauri/resources/", "src-tauri/semgrep/",
+        "src-tauri/crates/", "src-tauri/tests/", "src-tauri/scripts/",
+        "src-tauri/data/", "src-tauri/bin/", "src-tauri/gen/",
+        "src-tauri/.cargo/",
     ],
     "ZONA 5 - Frontend Svelte": [
         "src/components/", "src/lib/", "src/routes/",
@@ -67,7 +71,8 @@ CANONICAL_ZONES: dict[str, list[str]] = {
     ],
     "ZONA 6 - Raiz (arquivos pontuais)": [
         "README.md", "LICENSE", "Cargo.toml", "Cargo.lock", "package.json",
-        "pnpm-lock.yaml", "tsconfig.json", "tsconfig.node.json",
+        "pnpm-lock.yaml", "pnpm-workspace.yaml", ".npmrc", ".gitmodules",
+        "tsconfig.json", "tsconfig.node.json",
         "svelte.config.js", "vite.config.ts",
         "tailwind.config.js", "postcss.config.js", ".gitignore",
         ".gitattributes", ".editorconfig", ".prettierrc", ".eslintrc.cjs",

@@ -23,7 +23,7 @@ Antes de começar qualquer trabalho, **carregue o mapa territorial** lendo:
 cat _WORKSPACE_MAP.md
 
 # 2. Rodar o auditor para confirmar baseline limpo
-python docs/scripts/audit_workspace_compliance.py --quiet
+python docs/runtime/scripts/audit_workspace_compliance.py --quiet
 ```
 
 Se a saída do auditor mostrar **0 findings** → workspace OK, prossiga.
@@ -101,7 +101,7 @@ Se mostrar findings → **NÃO PROSSIGA** até reportar ao Arquiteto Humano.
 Sempre que terminar uma sequência de mudanças territoriais, rode:
 
 ```bash
-python docs/scripts/audit_workspace_compliance.py
+python docs/runtime/scripts/audit_workspace_compliance.py
 ```
 
 Saídas:
@@ -133,7 +133,7 @@ Modos avançados:
 ## 8. REFERÊNCIAS
 
 - **Mapa canônico:** `_WORKSPACE_MAP.md` (v6.0)
-- **Auditor:** `docs/scripts/audit_workspace_compliance.py`
+- **Auditor:** `docs/runtime/scripts/audit_workspace_compliance.py`
 - **Manifesto:** `docs/SOULS_CANON_MANIFEST.md`
 - **Marco:** Marco 3.10 — Reorganização Territorial do Workspace
 

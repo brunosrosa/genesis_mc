@@ -1,67 +1,29 @@
-pub mod hardware_profiler;
-pub mod file_locker;
-pub mod inference_adapter;
-pub mod model_registry;
-pub mod response_healing;
-pub mod model_manager;
-pub mod headroom_engine;
-pub mod mcp_transport; // SOULS-CANIBALIZED: trait McpTransport + LeanVacuum
+// =============================================================================
+// SOULS MC — Core Domain Modularization Architecture (v6.1)
+//
+// 1. inference/     -> 18 motores de inferência, adaptadores e registradores
+// 2. vram_hardware/ -> VRAM Scheduler, HW Watchdog, Profiler e Headroom
+// 3. security/      -> Sandbox LPAC, SubprocessGuard, FileLocker, PII e L7 Shield
+// 4. socratic/      -> Barramento Socrático, Thoughts Stream, CLI e Cohomologia
+// 5. governance/    -> GatewayConfig, SDD Cascade, Semantic Search e Telemetry
+// =============================================================================
 
-// Marco I · v6.1 — Agnostic L7 Gateway (componentes canibalizados)
-pub mod gateway_config; // SOULS-CANIBALIZED Marco I: JSONC parser + GatewayConfig SSOT
-pub mod peak_ewma; // SOULS-CANIBALIZED Marco I: PeakEWMA α=0.3 + lock-free ring buffer
-pub mod sticky_router; // SOULS-CANIBALIZED Marco I: Sticky routing por session_id (Prefix Cache)
-pub mod pii_redactor; // SOULS-CANIBALIZED Marco I: Aho-Corasick PII redaction (default disabled)
-pub mod telemetry_dispatcher; // SOULS-CANIBALIZED Marco I: MPSC → SQLite WAL V5 (worker thread dedicada)
-pub mod subprocess_guard; // SOULS-CANIBALIZED Marco I: SubprocessGuard RAII com kill_on_drop
+pub mod inference;
+pub mod vram_hardware;
+pub mod security;
+pub mod socratic;
+pub mod governance;
 
-#[cfg(feature = "ik_llama_ffi")]
-pub mod llama_engine;
-
-pub mod llama_upstream_engine;
-
-pub mod mistral_engine;
-
-pub mod bitnet_daemon;
-pub mod engine_trait;
-pub mod v3_ignition_tests;
-
-// SOULS V4 — Topologia dos 8 motores de inferencia (stubs conformantes sob EphemeralInferEngine).
-pub mod llama_logit_probing;
-pub mod epistemic_prober; // SOULS-CANIBALIZED Marco 4.9.3: Avaliador Epistêmico (Hipocampo) - trait síncrono CPU/AVX2
-pub mod cohomology; // SOULS-CANIBALIZED Marco 4.10.0: Cohomologia de Feixes Socráticos (H¹ ≠ 0 → boost conflito_memoria)
-pub mod socratic_event_bus; // SOULS-CANIBALIZED Marco 4.10.0: Disjuntor Socrático via IPC Zero-Copy (Tauri event 'socratic_interrupt')
-pub mod socratic_interrupt; // SOULS V6 MARCO 5.11.0: Canal de Interrupção Socrática CLI Híbrido
-pub mod l7_shield; // SOULS-CANIBALIZED Marco 4.10.0: L7 Shield (MPSC + oneshot para prober síncrono em thread dedicada)
-pub mod mistral_sidecar;
-pub mod bitnet_engine;
-pub mod pulp_matrix_engine;
-pub mod burn_engine;
-pub mod ort_scorer;
-pub mod gliclass_engine; // SOULS V6 MARCO 5.3.0: Sentinela de Borda Bare-Metal OrtScorerEngine (GLiClass Zero-Shot Triage)
-pub mod gigatoken_encoder; // SOULS V6 MARCO 5.4.0: GigaTokenEncoder Auto-Curativo & Prefill Bypass
-pub mod gigatoken; // SOULS V6 MARCO 5.4.0: GigaToken SIMD Engine
-pub mod drift_sentinel; // SOULS V6 Task 138: Olheiro de Drift Reativo de Fase -1
-pub mod late_binding_router; // SOULS V6 ADR-041: Maestro de Amarração Tardia MCP
-pub mod vram_scheduler; // SOULS V6 MARCO 5.12.0: VRAM Scheduler Dinâmico e Gerenciador de Evicção LRU
-pub mod hardware_watchdog; // SOULS V6 MARCO 5.12.0/IV: Watchdog Térmico + WATCHDOG_STATE lock-free
-pub mod sandbox; // SOULS V6 MARCO 5.13.0: Isolamento LPAC Nativo e Bypass Gracioso (Windows 11)
-pub mod sdd; // SOULS V6 MARCO 5.16.0: Orquestrador de Cascata Documental SDD (SddValidationEngine + State V6)
-pub mod semantic_search; // SOULS V6 MARCO VI: Hipocampo Ativo, LanceDB Zero-VRAM, RRF AVX2 e LadybugDB
-pub mod chyros_daemon; // SOULS V6 MARCO 5.7.0: Chyros Daemon (AutoDream & Metabolismo Estocástico)
-pub mod socratic_cli; // SOULS V6 MARCO 5.11.0: Socratic CLI & CPU Logit Probing Controller
-pub mod ipc_bridge; // SOULS V6 NERVO ÓPTICO: WatchdogIpcBridge & Zero-Copy Binary Telemetry
-pub mod socratic_thought_stream; // SOULS V6 NERVO ÓPTICO: SocraticThoughtBroadcaster MPSC Stream
-pub mod terminal_drawer_stream; // SOULS V6 NERVO ÓPTICO: TerminalLogBatcher Token Bucket Micro-Batching
-
-#[cfg(feature = "lora_adapter")]
-pub mod llama_lora_adapter; // SOULS V6 MARCO IV: Hot-swap de adaptadores LoRA (ik_llama.cpp FFI)
-
+pub use inference::*;
+pub use vram_hardware::*;
+pub use security::*;
+pub use socratic::*;
+pub use governance::*;
 
 // Aliases de compatibilidade retroativa
-pub use burn_engine as burn_agnostic;
-pub use llama_logit_probing as llama_cpp4_logit;
-pub use pulp_matrix_engine as pulp_lele;
+pub use inference::burn_engine as burn_agnostic;
+pub use inference::llama_logit_probing as llama_cpp4_logit;
+pub use inference::pulp_matrix_engine as pulp_lele;
 
 use std::path::PathBuf;
 
@@ -112,5 +74,3 @@ pub fn workspace_root() -> PathBuf {
     }
     PathBuf::from(".")
 }
-
-

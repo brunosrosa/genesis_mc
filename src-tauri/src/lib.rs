@@ -6,4 +6,6 @@ pub mod telemetry;
 pub mod process_guard;
 pub mod core;
 pub mod souls_thermal_governor;
+#[cfg(feature = "tauri-app")]
+pub mod ipc;
 

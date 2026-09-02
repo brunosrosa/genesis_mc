@@ -1,76 +1,8 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use tauri::ipc::Channel;
 use tauri::Manager;
-
-/// `souls_ping` — health check trivial.
-#[tauri::command]
-fn souls_ping(payload: &str) -> String {
-    format!("Souls MC Core Online. Recebido: {}", payload)
-}
-
-// =============================================================================
-// SOULS MC Marco V — SODA Canvas v0.1: Tauri v2 IPC Zero-Copy Telemetry Bridge.
-//
-// `start_watchdog_stream` recebe um `Channel<Vec<u8>>` do frontend (Svelte 5)
-// e o injeta no `watchdog_ipc::spawn_watchdog_channel`. O canal emite
-// EXATAMENTE 8 bytes (u64 packed little-endian) a cada 1Hz — sem JSON.
-//
-// O frontend chama via:
-//   const channel = new Channel<Uint8Array>();
-//   await invoke('start_watchdog_stream', { channel });
-// =============================================================================
-#[tauri::command]
-async fn start_watchdog_stream(app: tauri::AppHandle, channel: Channel<Vec<u8>>) {
-    souls_mc_lib::telemetry::watchdog_ipc::spawn_watchdog_channel(app, channel);
-}
-
-// =============================================================================
-// SOULS-CANIBALIZED Marco 3.9 Fase E.2: Tauri v2 IPC commands para Svelte 5.
-//
-// Padrão: `Result<Value, String>` na fronteira (zero-cost: Svelte 5 captura
-// `invoke().then().catch()` graciosamente sem travar o renderer).
-// As 3 funções delegam 100% para `souls_mc_lib::cognition::thinking::handlers`
-// (canibalização: 0 lógica de negócios no main.rs, conforme ADR-005 §Frontend
-// Passivo).
-// =============================================================================
-
-/// `socratic_export_session` — exporta árvore de pensamentos socráticos.
-#[tauri::command]
-async fn socratic_export_session(
-    session_id: String,
-    format: Option<String>,
-) -> Result<serde_json::Value, String> {
-    souls_mc_lib::cognition::thinking::handlers::handle_export_session(
-        &session_id,
-        format.as_deref(),
-        None,
-    )
-    .map_err(|e| format!("export_session falhou: {e}"))
-}
-
-/// `socratic_analyze_session` — métricas FinOps cognitivas por sessão.
-#[tauri::command]
-async fn socratic_analyze_session(session_id: String) -> Result<serde_json::Value, String> {
-    souls_mc_lib::cognition::thinking::handlers::handle_analyze_session(&session_id, None)
-        .map_err(|e| format!("analyze_session falhou: {e}"))
-}
-
-/// `socratic_merge_sessions` — fusão atômica via barramento MPSC HIPER-FORWARD.
-#[tauri::command]
-async fn socratic_merge_sessions(
-    source_session_id: String,
-    target_session_id: String,
-) -> Result<serde_json::Value, String> {
-    souls_mc_lib::cognition::thinking::handlers::handle_merge_sessions(
-        &source_session_id,
-        &target_session_id,
-        None,
-        None, // síncrono por padrão (Tauri frontend prefere transação explícita)
-    )
-    .map_err(|e| format!("merge_sessions falhou: {e}"))
-}
+use souls_mc_lib::ipc::commands::{socratic, telemetry};
 
 // Símbolos de driver para forçar o uso exclusivo da iGPU (GPU integrada)
 // e blindar a dGPU (RTX 2060m / 6GB VRAM) para os modelos locais (CUDA/Candle/mistral.rs).
@@ -112,11 +44,11 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
-            souls_ping,
-            start_watchdog_stream,
-            socratic_export_session,
-            socratic_analyze_session,
-            socratic_merge_sessions,
+            telemetry::souls_ping,
+            telemetry::start_watchdog_stream,
+            socratic::socratic_export_session,
+            socratic::socratic_analyze_session,
+            socratic::socratic_merge_sessions,
         ])
         .setup(|app| {
             // souls_mc é puramente um tray daemon (Tauri TrayIconBuilder).

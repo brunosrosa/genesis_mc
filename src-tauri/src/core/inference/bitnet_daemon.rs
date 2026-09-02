@@ -28,14 +28,14 @@ pub enum BitNetError {
     JobObjectError(String),
 }
 
-/// Envolvente RAII para o Handle do Job Object do Windows Kernel.
+/// Envolvente RAII para o Handle do Job Object do Windows Kernel no BitNet Daemon.
 #[cfg(target_os = "windows")]
-pub struct WindowsJobGuard {
+pub struct BitNetJobGuard {
     handle: HANDLE,
 }
 
 #[cfg(target_os = "windows")]
-impl WindowsJobGuard {
+impl BitNetJobGuard {
     pub fn new() -> Result<Self, String> {
         let job_handle = unsafe { CreateJobObjectW(std::ptr::null(), std::ptr::null()) };
         if job_handle.is_null() {
@@ -74,7 +74,7 @@ impl WindowsJobGuard {
 }
 
 #[cfg(target_os = "windows")]
-impl Drop for WindowsJobGuard {
+impl Drop for BitNetJobGuard {
     fn drop(&mut self) {
         if !self.handle.is_null() {
             unsafe { CloseHandle(self.handle); }
@@ -87,7 +87,7 @@ pub struct BitNetDaemon {
     pub model_path: PathBuf,
     child_process: Option<Child>,
     #[cfg(target_os = "windows")]
-    _job_guard: Option<WindowsJobGuard>,
+    _job_guard: Option<BitNetJobGuard>,
 }
 
 impl BitNetDaemon {
@@ -110,7 +110,7 @@ impl BitNetDaemon {
             .map_err(|e| BitNetError::SpawnError(e.to_string()))?;
 
         #[cfg(target_os = "windows")]
-        let job_guard = match WindowsJobGuard::new() {
+        let job_guard = match BitNetJobGuard::new() {
             Ok(guard) => {
                 if let Err(e) = guard.assign_child(&child) {
                     tracing::warn!("Falha ao associar BitNetDaemon ao Job Object: {}", e);

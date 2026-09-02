@@ -639,7 +639,7 @@ def compile_models_inventory(output_dir, root_dir):
 
 def main():
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    root_dir = os.path.abspath(os.path.join(script_dir, "..", ".."))
+    root_dir = os.path.abspath(os.path.join(script_dir, "..", "..", ".."))
     output_dir = os.path.join(root_dir, "docs", "observability", "context_dumps")
     os.makedirs(output_dir, exist_ok=True)
     

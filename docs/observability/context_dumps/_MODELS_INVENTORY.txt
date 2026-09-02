@@ -1,20 +1,21 @@
 === SOULS LOCAL PHYSICAL MODELS INVENTORY (FASE 1.5 CONSCIÊNCIA DO SILÍCIO) ===
-GERADO EM: 2026-08-24 20:08:22
+GERADO EM: 2026-09-02 00:18:24
 FONTE DE ESTADO SQLITE: Z:\souls_mc\.souls_data\souls_heuristic_vault.db (VIEW NATIVA: vw_finops_routing)
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-TOTAL DE ARQUIVOS FÍSICOS DE MODELOS NO DISCO: 48 | ESPAÇO TOTAL EM DISCO: 109.45 GB
-  • MODELOS LLM PRINCIPAIS DE INFERÊNCIA: 34 (91.93 GB)
+TOTAL DE ARQUIVOS FÍSICOS DE MODELOS NO DISCO: 50 | ESPAÇO TOTAL EM DISCO: 115.20 GB
+  • MODELOS LLM PRINCIPAIS DE INFERÊNCIA: 36 (97.68 GB)
   • MÓDULOS AUXILIARES / ADDONS (VISÃO, DRAFT, MTP, LORA): 12 (14.33 GB)
   • MODELOS EMBARCADOS & CORE INTERNOS (src-tauri/models - ONNX / NER): 2 (3.19 GB)
   • DOWNLOADS E ARQUIVOS PARCIAIS (.PART): 0 (0.00 GB)
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-=== SEÇÃO 1: MODELOS LLM PRINCIPAIS DE INFERÊNCIA (34) ===
+=== SEÇÃO 1: MODELOS LLM PRINCIPAIS DE INFERÊNCIA (36) ===
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 FAMÍLIA              | NOME REAL DO MODELO                                                         | PARAMS   | QUANT          | CONTEXTO   | CAPACIDADES                         | TAMANHO (GB) | CAMINHO FÍSICO
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 laguna               | Local - Safetensors (GGUF)                                                  | N/A      | Q4_K_M         | 256K       | TOOL_CALLING                        | 14.69        | C:\Users\rosas/.lmstudio/models\mudler\Laguna-XS-2.1-APEX-GGUF\Laguna-XS-2.1-APEX-I-Compact.gguf
 gemma3               | Local - Essentialai Rnj 1 Instruct (GGUF)                                   | N/A      | Q4_K_M         | 32K        | INSTRUCT, TOOL_CALLING              | 4.76         | C:\Users\rosas/.lmstudio/models\lmstudio-community\rnj-1-instruct-GGUF\rnj-1-instruct-Q4_K_M.gguf
+safetensors          | model-00001-of-00002                                                        | unknown  | SAFETENSORS    | 4K         | CODE, INSTRUCT, general             | 4.62         | C:\Users\rosas/.lmstudio/models\Qwen\Qwen2.5-Coder-3B-Instruct\model-00001-of-00002.safetensors
 hunyuan-dense        | Local - 7B (GGUF)                                                           | 7B       | Q4_K_M         | 256K       | BASE                                | 4.31         | C:\Users\rosas/.lmstudio/models\tencent\Hy-MT2-7B-GGUF\Hy-MT2-7B-Q4_K_M.gguf
 llama                | Local - Mamba Codestral 7B V0 (GGUF)                                        | 7B       | Q4_K_M         | 32K        | BASE, CODE, INSTRUCT                | 4.07         | C:\Users\rosas/.lmstudio/models\Agnuxo\Mamba-Codestral-7B-Instruct_CODE_Python-Spanish_English_GGUF_4bit\unsloth.Q4_K_M.gguf
 mamba2               | Local - Mamba Codestral 7B V0 (GGUF)                                        | 7B       | Q4_K_M         | 1M         | BASE, CODE                          | 3.86         | C:\Users\rosas/.lmstudio/models\viniciusianni\Mamba-Codestral-7B-v0.1-Q4_K_M-GGUF\mamba-codestral-7b-v0.1-q4_k_m.gguf
@@ -24,7 +25,7 @@ qwen2vl              | Local - Synthagent SFT UI TARS 1 (GGUF)                  
 qwen2vl              | Microsoft - Fara 7B (GGUF)                                                  | 7B       | IQ3_M          | 125K       | BASE                                | 3.33         | C:\Users\rosas/.lmstudio/models\bartowski\microsoft_Fara-7B-GGUF\microsoft_Fara-7B-IQ3_M.gguf
 gemma4               | Local - Gemma 4 E2B (GGUF)                                                  | N/A      | Q4_K_M         | 128K       | INSTRUCT, TOOL_CALLING              | 3.19         | C:\Users\rosas/.lmstudio/models\lmstudio-community\gemma-4-E2B-it-GGUF\gemma-4-E2B-it-Q4_K_M.gguf
 gemma4               | Local - Gemma 4 E2B It Ultra Uncensored Heretic (GGUF)                      | N/A      | Q4_K_M         | 128K       | INSTRUCT, TOOL_CALLING, UNCENSORED  | 3.19         | C:\Users\rosas/.lmstudio/models\llmfan46\gemma-4-E2B-it-ultra-uncensored-heretic-GGUF\gemma-4-E2B-it-ultra-uncensored-heretic-Q4_K_M.gguf
-GLiClass             | Local - model.safetensors                                                   | N/A      | SAFETENSORS    | 4K         | BASE                                | 3.18         | C:\Users\rosas/.lmstudio/models\knowledgator\gliclass-multilang-ultra\model.safetensors
+safetensors          | gliclass-multilang-ultra.safetensors                                        | unknown  | SAFETENSORS    | 4K         | general                             | 3.18         | C:\Users\rosas/.lmstudio/models\knowledgator\gliclass-multilang-ultra\model.safetensors
 mamba                | Local - Falcon3 Mamba 7B Instruct (GGUF)                                    | 7B       | IQ3_M          | 1M         | BASE, INSTRUCT                      | 3.05         | C:\Users\rosas/.lmstudio/models\mradermacher\Falcon3-Mamba-7B-Instruct-i1-GGUF\Falcon3-Mamba-7B-Instruct.i1-IQ3_M.gguf
 phi3                 | Local - Phi-4 Mini Instruct (GGUF)                                          | N/A      | Q5_K_M         | 128K       | INSTRUCT, TOOL_CALLING              | 2.65         | C:\Users\rosas/.lmstudio/models\unsloth\Phi-4-mini-instruct-GGUF\Phi-4-mini-instruct-Q5_K_M.gguf
 nemotron_h           | LMStudio - Community Nn (GGUF)                                              | 4B       | Q4_K_M         | 1M         | INSTRUCT, TOOL_CALLING              | 2.64         | C:\Users\rosas/.lmstudio/models\lmstudio-community\NVIDIA-Nemotron-3-Nano-4B-GGUF\NVIDIA-Nemotron-3-Nano-4B-Q4_K_M.gguf
@@ -40,6 +41,7 @@ qwen2                | Qwen - Qwen2 (GGUF)                                      
 smollm3              | Local - SmolLM3 3B (GGUF)                                                   | 3B       | Q5_K_M         | 64K        | TOOL_CALLING                        | 2.06         | C:\Users\rosas/.lmstudio/models\bartowski\HuggingFaceTB_SmolLM3-3B-GGUF\HuggingFaceTB_SmolLM3-3B-Q5_K_M.gguf
 qwen2                | Qwen - Deepseek R1 Distill 1 (GGUF)                                         | 1.5B     | Q8_0           | 128K       | INSTRUCT, REASONING, TOOL_CALLING   | 1.76         | C:\Users\rosas/.lmstudio/models\lmstudio-community\DeepSeek-R1-Distill-Qwen-1.5B-GGUF\DeepSeek-R1-Distill-Qwen-1.5B-Q8_0.gguf
 lfm2                 | Local - Liquidai LFM2 5 1 (GGUF)                                            | 1.2B     | Q8_0           | 125K       | INSTRUCT, TOOL_CALLING              | 1.16         | C:\Users\rosas/.lmstudio/models\lmstudio-community\LFM2.5-1.2B-Instruct-GGUF\LFM2.5-1.2B-Instruct-Q8_0.gguf
+safetensors          | model-00002-of-00002                                                        | unknown  | SAFETENSORS    | 4K         | CODE, INSTRUCT, general             | 1.13         | C:\Users\rosas/.lmstudio/models\Qwen\Qwen2.5-Coder-3B-Instruct\model-00002-of-00002.safetensors
 bitnet-b1.58         | Local - Bitnet2b (GGUF)                                                     | 2B       | I2_S           | 4K         | BASE, INSTRUCT                      | 1.11         | C:\Users\rosas/.lmstudio/models\microsoft\bitnet-b1.58-2B-4T-gguf\ggml-model-i2_s.gguf
 mamba                | Local - Mamba 790m Hf (GGUF)                                                | 790M     | Q4_K_M         | 1M         | BASE                                | 0.45         | C:\Users\rosas/.lmstudio/models\Subject-Emu-5259\NeuralAI-Mamba-K2\mamba-790m-hf.Q4_K_M.gguf
 llama                | Local - Smollm2 360M 8k Lc100K Mix1 Ep2 (GGUF)                              | 360M     | Q8_0           | 8K         | BASE, INSTRUCT                      | 0.36         | C:\Users\rosas/.lmstudio/models\HuggingFaceTB\SmolLM2-360M-Instruct-GGUF\smollm2-360m-instruct-q8_0.gguf
@@ -71,6 +73,6 @@ SPECULATIVE_DRAFT    | Rascunho Especulativo (DSpark)      | dflash             
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 NOME DO ARQUIVO                     | FUNÇÃO / TIPO                                      | FORMATO    | TAMANHO (GB) | CAMINHO FÍSICO
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-gliclass_multilang.onnx.data        | Modelo ONNX / Classificador de Intenção / NER Core | DATA       | 3.18         | Z:\souls_mc\src-tauri\models\gliclass_multilang.onnx.data
-gliclass_multilang.onnx             | Modelo ONNX / Classificador de Intenção / NER Core | ONNX       | 0.00         | Z:\souls_mc\src-tauri\models\gliclass_multilang.onnx
+gliclass_multilang.onnx.data        | Modelo ONNX / Classificador de Intenção / NER Core | DATA       | 3.18         | Z:\souls_mc\src-tauri\models\GLiClass_Multilang_Ultra\gliclass_multilang.onnx.data
+gliclass_multilang.onnx             | Modelo ONNX / Classificador de Intenção / NER Core | ONNX       | 0.00         | Z:\souls_mc\src-tauri\models\GLiClass_Multilang_Ultra\gliclass_multilang.onnx
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
