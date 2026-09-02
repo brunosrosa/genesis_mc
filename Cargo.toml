@@ -7,6 +7,9 @@ members = [
     "crates/anthropophagy",
 ]
 
+[workspace.lints.rust]
+linker_messages = "allow"
+
 # =============================================================================
 # ADR-030 (Módulo 4): Workspace Dependency Pinning Rígido (SSOT)
 # =============================================================================

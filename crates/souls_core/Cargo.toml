@@ -8,6 +8,9 @@ description = "Motor de negócios, telemetria, governança e persistência assí
 name = "souls_mc_lib"
 crate-type = ["rlib"]
 
+[lints]
+workspace = true
+
 [dependencies]
 souls_protocol = { path = "../souls_protocol" }
 
