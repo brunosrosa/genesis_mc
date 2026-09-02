@@ -71,6 +71,8 @@ vendor/**/*.so
 vendor/**/*.dylib
 vendor/**/*.dll
 vendor/**/*.pdb
+vendor/
+
 
 # Ignora arquivos de controle de geração do CMake
 vendor/**/CMakeCache.txt
