@@ -94,18 +94,8 @@ impl EngineProbe for LlamaUpstreamProbe {
             return EngineSupportLevel::Unsupported("Arquitetura RWKV requer runtime linear dedicado".to_string());
         }
 
-        // Modelos específicos que exigem kernels upstream do llama.cpp oficial ou BitNet 1.58b
-        if fam_lower.contains("phi") || path_lower.contains("phi-4") || fam_lower.contains("nemotron") || path_lower.contains("nemotron") || fam_lower.contains("lfm") || path_lower.contains("lfm") || path_lower.contains("rnj") || path_lower.contains("hy-mt2") || path_lower.contains("i2_s") || path_lower.contains("bitnet") || fam_lower.contains("bitnet") {
-            return EngineSupportLevel::Native(220);
-        }
-
-        // Mamba / SSM em GGUF suportado nativamente pelo upstream (Fallback 180)
-        if fam_lower.contains("mamba") || path_lower.contains("mamba") || fam_lower.contains("zamba") || path_lower.contains("zamba") {
-            return EngineSupportLevel::Fallback(180);
-        }
-
         match topology.file_format {
-            FileFormat::Gguf => EngineSupportLevel::Fallback(150),
+            FileFormat::Gguf => EngineSupportLevel::Native(220),
             _ => EngineSupportLevel::Unsupported("Formato incompatível com motor llama_upstream (requer GGUF)".to_string()),
         }
     }
@@ -115,41 +105,16 @@ pub struct LlamaVanguardProbe;
 
 impl EngineProbe for LlamaVanguardProbe {
     fn engine_id(&self) -> &'static str {
-        "ik_llama_vanguard"
+        "llama_upstream"
     }
 
     fn probe_support(&self, model_path: &Path, topology: &TopologyFeatures) -> EngineSupportLevel {
-        if !model_path.exists() {
-            return EngineSupportLevel::Unsupported("Arquivo de modelo inexistente no disco".to_string());
-        }
-
-        let path_lower = model_path.to_string_lossy().to_lowercase();
-        let fam_lower = topology.family_raw.to_lowercase();
-
-        // RWKV puro utiliza motor linear próprio não-GGUF
-        if fam_lower.contains("rwkv") || path_lower.contains("rwkv") {
-            return EngineSupportLevel::Unsupported("Arquitetura RWKV requer runtime linear dedicado".to_string());
-        }
-
-        // Modelos específicos que exigem kernels upstream do llama.cpp oficial ou quantização Q1 / BitNet
-        if fam_lower.contains("phi") || path_lower.contains("phi-4") || fam_lower.contains("nemotron") || path_lower.contains("nemotron") || fam_lower.contains("lfm") || path_lower.contains("lfm") || path_lower.contains("rnj") || path_lower.contains("hy-mt2") || path_lower.contains("q1_0") || path_lower.contains("iq1_") || path_lower.contains("i2_s") || path_lower.contains("bitnet") {
-            return EngineSupportLevel::Unsupported("Modelo com arquitetura/quantização que exige llama_upstream oficial".to_string());
-        }
-
-        // Mamba / SSM
-        if fam_lower.contains("mamba") || path_lower.contains("mamba") || fam_lower.contains("zamba") || path_lower.contains("zamba") {
-            return EngineSupportLevel::Unsupported("Arquitetura Mamba/SSM roteada para llama_upstream".to_string());
-        }
-
-        match topology.file_format {
-            FileFormat::Gguf => EngineSupportLevel::Native(200),
-            _ => EngineSupportLevel::Unsupported("Formato incompatível com LlamaVanguard (requer GGUF)".to_string()),
-        }
+        LlamaUpstreamProbe.probe_support(model_path, topology)
     }
 }
 
 // =============================================================================
-// SOULS V4 — 6 novos probes para o cascade de 8 motores.
+// SOULS V4 — Probes para o cascade de motores unificado.
 // =============================================================================
 
 pub struct LlamaCpp4LogitProbe;
@@ -183,22 +148,12 @@ impl EngineProbe for MistralRsSidecarProbe {
         let path_lower = model_path.to_string_lossy().to_lowercase();
         let fam_lower = topology.family_raw.to_lowercase();
 
-        // Modelos GGUF não suportados pelo parser do mistralrs-core 0.8.1
-        if fam_lower.contains("mamba") || path_lower.contains("mamba") || fam_lower.contains("zamba") || path_lower.contains("zamba")
-            || fam_lower.contains("qwen35") || path_lower.contains("qwen35") || fam_lower.contains("qwen3.5") || path_lower.contains("qwen3.5") || fam_lower.contains("qwen3_5") || path_lower.contains("qwen3_5")
-            || fam_lower.contains("gemma4") || path_lower.contains("gemma-4") || path_lower.contains("gemma4")
-            || fam_lower.contains("phi-4") || path_lower.contains("phi4") || fam_lower.contains("nemotron") || path_lower.contains("nemotron")
-            || path_lower.contains("lfm") || fam_lower.contains("lfm") || path_lower.contains("rnj")
-            || path_lower.contains("i2_s") || path_lower.contains("bitnet") || path_lower.contains("q1_0") || path_lower.contains("iq1_") {
-            return EngineSupportLevel::Unsupported("GGUF com arquitetura/quantização não suportada pelo mistralrs-core 0.8.1 (roteado para llama_upstream)".to_string());
-        }
-
         // Modelos Encoder-Only / GLiClass são discriminativos e devem ser roteados para o OrtScorer
         if path_lower.contains("gliclass") || fam_lower.contains("gliclass") || path_lower.contains("deberta") || fam_lower.contains("deberta") {
             return EngineSupportLevel::Unsupported("GLiClass/DeBERTa é discriminativo (roteado para ort_scorer)".to_string());
         }
 
-        // Suporte a pesos Safetensors / HuggingFace nativos de LLMs generativos
+        // Suporte soberano a pesos Safetensors / HuggingFace nativos (ISQ Q4K e CPU AVX2)
         if path_lower.ends_with(".safetensors") || path_lower.ends_with(".bin") {
             #[cfg(feature = "mistral_backend")]
             return EngineSupportLevel::Native(250);
@@ -214,15 +169,15 @@ impl EngineProbe for MistralRsSidecarProbe {
             return EngineSupportLevel::Fallback(80);
         }
 
-        // Suporte a outros modelos Transformer GGUF compatíveis (Llama, Qwen, Gemma v1/v2, Phi2/3)
-        if matches!(topology.file_format, FileFormat::Gguf) {
+        // Modelos GGUF leves bootstrap (SmolLM, Tier 0)
+        if path_lower.contains("135m") || path_lower.contains("360m") || fam_lower.contains("smollm") {
             #[cfg(feature = "mistral_backend")]
-            return EngineSupportLevel::Fallback(170);
+            return EngineSupportLevel::Fallback(180);
             #[cfg(not(feature = "mistral_backend"))]
             return EngineSupportLevel::Fallback(80);
         }
 
-        EngineSupportLevel::Unsupported("Formato ou arquitetura incompatível com mistral_rs".to_string())
+        EngineSupportLevel::Unsupported("Modelo GGUF denso ou arquitetura customizada roteado para llama_upstream".to_string())
     }
 }
 

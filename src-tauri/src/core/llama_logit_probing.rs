@@ -7,14 +7,14 @@
 // CURA DO FANTASMA FNV-1a (Marco II - 2026-08-12):
 // O hot-path de produção foi LIBERTADO do hash FNV-1a sintético. As fontes canônicas de logits são:
 //   - `LogitSource::RealLlama`   : extração real via FFI `llama_get_logits_ith` (n_gpu_layers=0).
-//                                   OBRIGATÓRIO sob `feature = "llama_backend"`; opcional com fail-soft.
+//                                   OBRIGATÓRIO sob `feature = "ik_llama_ffi"`; opcional com fail-soft.
 //   - `LogitSource::PromptDerived`: derivação legítima de features do prompt (Shannon byte entropy,
 //                                   char class distribution, estimated token count). ZERO hash, ZERO
 //                                   FNV-1a, ZERO mock. Determinístico e CPU-only.
 //   - `LogitSource::TestFixture` : vetor literal hardcoded para fixtures TDD. APENAS sob `#[cfg(test)]`.
 //                                   NUNCA em runtime de produção.
 
-#[allow(unused_imports)] // Arc é usado apenas sob `feature = "llama_backend"`
+#[allow(unused_imports)] // Arc é usado apenas sob `feature = "ik_llama_ffi"`
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tokio::sync::watch;
@@ -23,10 +23,10 @@ use crate::core::inference_adapter::{
 };
 use crate::souls_thermal_governor::SystemState;
 
-#[cfg(feature = "llama_backend")]
+#[cfg(feature = "ik_llama_ffi")]
 use ik_llama_cpp_2::context::LlamaContext;
 
-#[cfg(feature = "llama_backend")]
+#[cfg(feature = "ik_llama_ffi")]
 unsafe extern "C" fn silence_llama_logs(
     _level: ik_llama_cpp_sys::ggml_log_level,
     _text: *const std::os::raw::c_char,
@@ -44,10 +44,10 @@ const DEFAULT_PROBE_MARKER: &str = "__souls_default_logit_probe_marker__";
 /// Estado interno do caminho FFI real (Marco III — Battle 3.3).
 /// Carregamento lazy: o modelo GGUF é lido no primeiro probe, não no construtor.
 ///
-/// SOULS MC Marco IV: `pub` (gated by `#[cfg(feature = "llama_backend")]`)
+/// SOULS MC Marco IV: `pub` (gated by `#[cfg(feature = "ik_llama_ffi")]`)
 /// to satisfy `private_interfaces` — the `LogitSource::RealLlama` field
 /// inherits the visibility of the parent `pub enum`, and so must its type.
-#[cfg(feature = "llama_backend")]
+#[cfg(feature = "ik_llama_ffi")]
 pub struct RealLlamaInner {
     model_path: std::path::PathBuf,
     state: RealLlamaState,
@@ -56,7 +56,7 @@ pub struct RealLlamaInner {
 // SOULS MC Marco IV: manual `Debug` because the inner `LlamaModel` /
 // `LlamaContext` wrappers don't (and shouldn't) derive it — they own raw FFI
 // pointers. The path is enough for diagnostics; the model/context are redacted.
-#[cfg(feature = "llama_backend")]
+#[cfg(feature = "ik_llama_ffi")]
 impl std::fmt::Debug for RealLlamaInner {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("RealLlamaInner")
@@ -66,7 +66,7 @@ impl std::fmt::Debug for RealLlamaInner {
     }
 }
 
-#[cfg(feature = "llama_backend")]
+#[cfg(feature = "ik_llama_ffi")]
 enum RealLlamaState {
     /// Ainda não tentou carregar (tentativa lazy no primeiro `extract_logits`).
     Init,
@@ -94,7 +94,7 @@ pub enum LogitSource {
     /// Fallback CPU-only: vetor de 128 logits derivado de features reais do prompt.
     /// Legítimo (não-hash), determinístico, reprodutível. É o default seguro.
     PromptDerived,
-    /// Extração real via FFI `llama_get_logits_ith` (gated por `feature = "llama_backend"`).
+    /// Extração real via FFI `llama_get_logits_ith` (gated por `feature = "ik_llama_ffi"`).
     /// `n_gpu_layers = 0` é aplicado incondicionalmente (ADR-027: 0 MB VRAM).
     ///
     /// **Marco III (2026-08-12) — FFI REAL:** A integração `llama_get_logits_ith` do
@@ -103,12 +103,12 @@ pub enum LogitSource {
     /// os logits brutos via FFI direta. Soft stable softmax (log-sum-exp) projeta
     /// o vocabulário nativo (256k) em `MOCK_VOCAB_SIZE` (128) via max-pooling em bins.
     /// Fail-soft: se o GGUF estiver ausente ou corrompido, cai em `PromptDerived`.
-    #[cfg(feature = "llama_backend")]
+    #[cfg(feature = "ik_llama_ffi")]
     RealLlama {
         // SOULS MC Marco IV: `RealLlamaInner` (defined below) is `pub` so
         // that this field — which inherits the visibility of the parent
         // `pub enum LogitSource` — is well-typed. The struct itself is
-        // gated by the same `#[cfg(feature = "llama_backend")]` so it
+        // gated by the same `#[cfg(feature = "ik_llama_ffi")]` so it
         // cannot leak into non-LLAMA builds.
         inner: Arc<Mutex<RealLlamaInner>>,
     },
@@ -127,7 +127,7 @@ impl LogitSource {
     pub fn extract_logits(&self, prompt: &str) -> Vec<f32> {
         match self {
             LogitSource::PromptDerived => prompt_derived_logits(prompt),
-            #[cfg(feature = "llama_backend")]
+            #[cfg(feature = "ik_llama_ffi")]
             LogitSource::RealLlama { inner } => {
                 let mut guard = inner.lock().expect("RealLlama Mutex poisoned");
                 match safe_ffi_call(std::panic::AssertUnwindSafe(|| real_llama_extract_logits(&mut guard, prompt))) {
@@ -213,7 +213,7 @@ impl LlamaLogitProber {
     /// O GGUF é carregado de forma lazy no primeiro `extract_logits` para evitar
     /// custo de boot. Se o modelo não existir ou falhar ao carregar, o caminho
     /// `RealLlama` cai em `PromptDerived` via fail-soft.
-    #[cfg(feature = "llama_backend")]
+    #[cfg(feature = "ik_llama_ffi")]
     pub fn with_real_llama(model_path: std::path::PathBuf) -> Self {
         let initial = prompt_derived_logits(DEFAULT_PROBE_MARKER);
         let inner = RealLlamaInner {
@@ -350,7 +350,7 @@ pub fn calculate_expected_vram_footprint(
 ///
 /// Retorna `None` em qualquer falha (modelo ausente, decode error, FFI null).
 /// O chamador cai em `PromptDerived` via fail-soft.
-#[cfg(feature = "llama_backend")]
+#[cfg(feature = "ik_llama_ffi")]
 fn real_llama_extract_logits(
     inner: &mut RealLlamaInner,
     prompt: &str,

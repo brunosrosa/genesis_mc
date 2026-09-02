@@ -16,7 +16,6 @@ use mistralrs::{
     PagedAttentionConfig, MemoryGpuConfig, PagedCacheType,
 };
 
-pub struct MistralRsEngine;
 
 #[cfg(feature = "mistral_backend")]
 static MISTRAL_PIPELINE_CACHE: OnceLock<Mutex<Option<(String, Arc<Model>)>>> = OnceLock::new();
@@ -39,6 +38,25 @@ fn get_mistral_runtime() -> Result<&'static tokio::runtime::Runtime, InferenceEr
             .expect("Falha ao inicializar Tokio Runtime global para Mistral.rs")
     });
     MISTRAL_RUNTIME.get().ok_or_else(|| InferenceError::ExecutionError("Mistral Runtime indisponível".to_string()))
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct MistralRsEngine {
+    pub force_cpu: bool,
+}
+
+impl MistralRsEngine {
+    pub fn new() -> Self {
+        Self { force_cpu: false }
+    }
+
+    pub fn new_cpu() -> Self {
+        Self { force_cpu: true }
+    }
+
+    pub fn new_gpu() -> Self {
+        Self { force_cpu: false }
+    }
 }
 
 #[cfg(feature = "mistral_backend")]
@@ -65,12 +83,13 @@ impl EphemeralInferEngine for MistralRsEngine {
             _ => return Err(InferenceError::ExecutionError(format!("Caminho de modelo invalido: {}", req.model_path))),
         };
 
+        let force_cpu = self.force_cpu;
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let rt = get_mistral_runtime()?;
 
             rt.block_on(async {
                 let is_safetensors = filename.to_lowercase().ends_with(".safetensors") || filename.to_lowercase().ends_with(".bin");
-                let cache_key = format!("{}:{}", req.model_path, if is_safetensors { "safetensors" } else { "gguf" });
+                let cache_key = format!("{}:{}:{}", req.model_path, if is_safetensors { "safetensors" } else { "gguf" }, if force_cpu { "cpu" } else { "gpu" });
 
                 // FastSwitch Pipeline Cache Check
                 let model = {
@@ -91,6 +110,12 @@ impl EphemeralInferEngine for MistralRsEngine {
                 let model = match model {
                     Some(m) => m,
                     None => {
+                        let device = if force_cpu {
+                            mistralrs::Device::Cpu
+                        } else {
+                            mistralrs::Device::cuda_if_available(0).unwrap_or(mistralrs::Device::Cpu)
+                        };
+
                         let paged_cfg = PagedAttentionConfig::new(
                             Some(32),
                             MemoryGpuConfig::ContextSize(4096),
@@ -100,6 +125,7 @@ impl EphemeralInferEngine for MistralRsEngine {
                         let built_model = if is_safetensors {
                             // Pilar 1 & 4: TextModelBuilder com In-Situ Quantization (ISQ Q4K) para Safetensors
                             let mut builder = TextModelBuilder::new(parent_dir.to_string_lossy().to_string())
+                                .with_device(device)
                                 .with_isq(IsqType::Q4K);
                             if let Some(ref p_cfg) = paged_cfg {
                                 builder = builder.with_paged_attn(p_cfg.clone());
@@ -112,7 +138,7 @@ impl EphemeralInferEngine for MistralRsEngine {
                             let mut builder = GgufModelBuilder::new(
                                 parent_dir.to_string_lossy().to_string(),
                                 vec![filename],
-                            );
+                            ).with_device(device);
                             let tok_json = parent_dir.join("tokenizer.json");
                             if tok_json.exists() {
                                 builder = builder.with_tokenizer_json(tok_json.to_string_lossy().to_string());

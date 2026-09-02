@@ -29,14 +29,6 @@ use souls_mc_lib::core::model_registry::{
 };
 use souls_mc_lib::souls_thermal_governor;
 
-#[cfg(all(not(feature = "ik_llama_backend"), not(feature = "llama_backend"), not(feature = "mistral_backend")))]
-use souls_mc_lib::core::inference_adapter::MockEphemeralInferEngine;
-
-#[cfg(any(feature = "ik_llama_backend", feature = "llama_backend"))]
-use souls_mc_lib::core::llama_engine::LlamaCppEngine;
-
-
-
 /// Modo de execução da Arena (5 Tiers Operacionais + All)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ArenaMode {
@@ -1052,73 +1044,49 @@ async fn profile_single_model_pass(
         }
     }
 
+    let is_safetensors = model_path_str.to_lowercase().ends_with(".safetensors") || model_path_str.to_lowercase().ends_with(".bin");
     let (engine_selected, engine): (String, std::sync::Arc<dyn EphemeralInferEngine>) = if engine_id == "ort_scorer" || model_path_str.to_lowercase().ends_with(".onnx") {
         ("ort_scorer".to_string(), std::sync::Arc::new(souls_mc_lib::core::ort_scorer::OrtScorerEngine::new()))
     } else if force_cpu {
-        #[cfg(any(feature = "ik_llama_backend", feature = "llama_backend"))]
-        {
-            ("llama_cpp4".to_string(), std::sync::Arc::new(LlamaCppEngine))
+        if engine_id == "mistral_rs" || engine_id == "mistral_rs_cpu" || is_safetensors {
+            ("mistral_rs_cpu".to_string(), std::sync::Arc::new(souls_mc_lib::core::mistral_engine::MistralRsEngine::new_cpu()))
+        } else {
+            ("llama_upstream_cpu".to_string(), std::sync::Arc::new(souls_mc_lib::core::llama_upstream_engine::LlamaUpstreamEngine::new_cpu()))
         }
-        #[cfg(not(any(feature = "ik_llama_backend", feature = "llama_backend")))]
-        {
-            ("llama_cpp4".to_string(), std::sync::Arc::new(MockEphemeralInferEngine))
-        }
-    } else if engine_id == "llama_upstream" {
-        ("llama_upstream".to_string(), std::sync::Arc::new(souls_mc_lib::core::llama_upstream_engine::LlamaUpstreamEngine))
-    } else if engine_id == "mistral_rs" || engine_id == "mistral_rs_sidecar" {
-        ("mistral_rs".to_string(), std::sync::Arc::new(souls_mc_lib::core::mistral_engine::MistralRsEngine))
+    } else if engine_id == "mistral_rs" || engine_id == "mistral_rs_sidecar" || is_safetensors {
+        ("mistral_rs".to_string(), std::sync::Arc::new(souls_mc_lib::core::mistral_engine::MistralRsEngine::new_gpu()))
     } else {
-        #[cfg(any(feature = "ik_llama_backend", feature = "llama_backend"))]
-        {
-            ("ik_llama_vanguard".to_string(), std::sync::Arc::new(LlamaCppEngine))
-        }
-        #[cfg(not(any(feature = "ik_llama_backend", feature = "llama_backend")))]
-        {
-            ("ik_llama_vanguard".to_string(), std::sync::Arc::new(MockEphemeralInferEngine))
-        }
+        ("llama_upstream".to_string(), std::sync::Arc::new(souls_mc_lib::core::llama_upstream_engine::LlamaUpstreamEngine::new_gpu()))
     };
 
-    #[cfg(any(feature = "ik_llama_backend", feature = "llama_backend"))]
-    let raw_gpu_layers = if force_cpu { 0 } else { souls_mc_lib::core::llama_engine::calculate_safe_gpu_layers(model_path, meta.as_ref()) };
-    #[cfg(not(any(feature = "ik_llama_backend", feature = "llama_backend")))]
-    let raw_gpu_layers = 0;
     let total_layers = meta.as_ref().map(|m| m.architecture.block_count).unwrap_or(32).max(1);
-    let (is_cpu, is_gpu, is_hybrid, hybrid_desc, kv_cache, vram_model_mb, vram_kv_mb, ram_model_mb) = if force_cpu || raw_gpu_layers == 0 {
-        let kv_max_gb = (declared_ctx as f64 * 32.0 * 2.0 * 2.0) / (1024.0 * 1024.0);
-        (true, false, false, "".to_string(), format!("36MB/{:.1}GB(F16)", kv_max_gb), 0.0, 0.0, file_size_mb)
-    } else if raw_gpu_layers >= total_layers || raw_gpu_layers == 99 {
-        let (kv_ratio, kv_tag) = if engine_selected == "ik_llama_vanguard" {
-            if matches!(tier, ModelTier::Tier2Background) || declared_ctx > 32768 {
-                (0.25, "TQ2")
-            } else {
-                (0.5, "TQ4")
-            }
-        } else if engine_selected == "llama_upstream" {
-            (0.625, "Q4_V")
-        } else if engine_selected == "mistral_rs" {
-            (1.0, "PagedAttn")
-        } else {
-            (1.0, "F16")
-        };
-        let kv_max_gb = (declared_ctx as f64 * 32.0 * kv_ratio * 2.0) / (1024.0 * 1024.0);
-        (false, true, false, "".to_string(), format!("36MB/{:.1}GB({})", kv_max_gb, kv_tag), file_size_mb * 0.95, 36.0, 0.0)
+    let (is_cpu, is_gpu, is_hybrid, hybrid_desc, kv_cache, vram_model_mb, vram_kv_mb, ram_model_mb) = if force_cpu {
+        (true, false, false, "".to_string(), "36MB (RAM: 128k | F16)".to_string(), 0.0, 0.0, file_size_mb)
+    } else if file_size_mb > 4500.0 {
+        // Modelos densos > 4.5GB (MoE Laguna 14.7GB, Bonsai 27B) executam em Hybrid Offload
+        let vram_budget = 2257.0f64;
+        let gpu_ratio = (vram_budget / file_size_mb).clamp(0.1, 0.9);
+        let layers_on_gpu = ((total_layers as f64) * gpu_ratio).round() as u32;
+        let vram_left_gb = ((6000.0 - vram_budget) / 1024.0).max(0.5);
+        let max_ctx_k = (vram_left_gb * 1024.0 * 1024.0) / (32.0 * 2.0 * 0.5 * 1000.0);
+        (true, true, true, format!("{}/{}L", layers_on_gpu, total_layers), format!("36MB (Max: {:.0}k | K:F16, V:Q4)", max_ctx_k), vram_budget, 36.0, file_size_mb - vram_budget)
     } else {
-        let gpu_ratio = (raw_gpu_layers as f64 / total_layers as f64).clamp(0.0, 1.0);
-        let (kv_ratio, kv_tag) = if engine_selected == "ik_llama_vanguard" {
-            if matches!(tier, ModelTier::Tier2Background) || declared_ctx > 32768 {
-                (0.25, "TQ2")
-            } else {
-                (0.5, "TQ4")
-            }
-        } else if engine_selected == "llama_upstream" {
-            (0.625, "Q4_V")
-        } else if engine_selected == "mistral_rs" {
-            (1.0, "PagedAttn")
+        // Modelos que cabem na VRAM de 6GB
+        let vram_used = file_size_mb.min(5500.0);
+        let vram_left_gb = ((6000.0 - vram_used) / 1024.0).max(0.5);
+        let max_ctx_k = if engine_selected == "mistral_rs" {
+            (vram_left_gb * 1024.0 * 1024.0) / (32.0 * 2.0 * 1.0 * 1000.0)
         } else {
-            (1.0, "F16")
+            (vram_left_gb * 1024.0 * 1024.0) / (32.0 * 2.0 * 0.5 * 1000.0)
         };
-        let kv_max_gb = (declared_ctx as f64 * 32.0 * kv_ratio * 2.0) / (1024.0 * 1024.0);
-        (true, true, true, format!("{}/{}L", raw_gpu_layers, total_layers), format!("36MB/{:.1}GB({})", kv_max_gb, kv_tag), file_size_mb * gpu_ratio, 36.0, file_size_mb * (1.0 - gpu_ratio))
+        let kv_label = if engine_selected == "mistral_rs" {
+            format!("36MB (Max: {:.0}k | PagedAttn)", max_ctx_k)
+        } else if engine_selected == "ort_scorer" {
+            "N/A (ONNX)".to_string()
+        } else {
+            format!("36MB (Max: {:.0}k | K:F16, V:Q4)", max_ctx_k)
+        };
+        (false, true, false, "".to_string(), kv_label, vram_used, 36.0, 0.0)
     };
 
     let mut total_duration_us = 0u64;
@@ -1369,15 +1337,17 @@ async fn run_mode_profile(
             let candidate_probes = cascade.probe_candidate_engines(m, &tf);
             let mut gpu_engines = Vec::new();
             for (eng, _) in &candidate_probes {
-                if (eng == "ik_llama_vanguard" || eng == "llama_upstream" || eng == "mistral_rs" || eng == "ort_scorer") && !gpu_engines.contains(&eng.as_str()) {
+                if (eng == "llama_upstream" || eng == "mistral_rs" || eng == "ort_scorer") && !gpu_engines.contains(&eng.as_str()) {
                     gpu_engines.push(eng.as_str());
                 }
             }
             if gpu_engines.is_empty() {
                 if name.to_lowercase().ends_with(".onnx") {
                     gpu_engines.push("ort_scorer");
+                } else if name.to_lowercase().ends_with(".safetensors") || name.to_lowercase().ends_with(".bin") {
+                    gpu_engines.push("mistral_rs");
                 } else {
-                    gpu_engines.push("ik_llama_vanguard");
+                    gpu_engines.push("llama_upstream");
                 }
             }
 
@@ -1398,7 +1368,7 @@ async fn run_mode_profile(
                 if !json_mode {
                     println!("\n[TIER 0 PROFILE] Modelo: {} | Executando Passada CPU (AVX2)...", name);
                 }
-                let res_cpu = profile_single_model_pass(m, ModelTier::Tier0Bootstrap, Some("llama_cpp4"), true, json_mode).await;
+                let res_cpu = profile_single_model_pass(m, ModelTier::Tier0Bootstrap, Some("llama_upstream_cpu"), true, json_mode).await;
                 tier0_res.push(res_cpu.clone());
                 all_results.push(res_cpu);
                 if !json_mode {
@@ -1423,15 +1393,17 @@ async fn run_mode_profile(
             let candidate_probes = cascade.probe_candidate_engines(m, &tf);
             let mut gpu_engines = Vec::new();
             for (eng, _) in &candidate_probes {
-                if (eng == "ik_llama_vanguard" || eng == "llama_upstream" || eng == "mistral_rs" || eng == "ort_scorer") && !gpu_engines.contains(&eng.as_str()) {
+                if (eng == "llama_upstream" || eng == "mistral_rs" || eng == "ort_scorer") && !gpu_engines.contains(&eng.as_str()) {
                     gpu_engines.push(eng.as_str());
                 }
             }
             if gpu_engines.is_empty() {
                 if name.to_lowercase().ends_with(".onnx") {
                     gpu_engines.push("ort_scorer");
+                } else if name.to_lowercase().ends_with(".safetensors") || name.to_lowercase().ends_with(".bin") {
+                    gpu_engines.push("mistral_rs");
                 } else {
-                    gpu_engines.push("ik_llama_vanguard");
+                    gpu_engines.push("llama_upstream");
                 }
             }
 
@@ -1452,7 +1424,7 @@ async fn run_mode_profile(
                 if !json_mode {
                     println!("\n[TIER 0.5 PROFILE] Modelo: {} | Executando Passada CPU (AVX2)...", name);
                 }
-                let res_cpu = profile_single_model_pass(m, ModelTier::Tier05Epistemic, Some("llama_cpp4"), true, json_mode).await;
+                let res_cpu = profile_single_model_pass(m, ModelTier::Tier05Epistemic, Some("llama_upstream_cpu"), true, json_mode).await;
                 tier05_res.push(res_cpu.clone());
                 all_results.push(res_cpu);
                 if !json_mode {
@@ -1476,15 +1448,17 @@ async fn run_mode_profile(
             let candidate_probes = cascade.probe_candidate_engines(m, &tf);
             let mut engines_to_run = Vec::new();
             for (eng, _) in &candidate_probes {
-                if (eng == "ik_llama_vanguard" || eng == "llama_upstream" || eng == "mistral_rs" || eng == "ort_scorer") && !engines_to_run.contains(&eng.as_str()) {
+                if (eng == "llama_upstream" || eng == "mistral_rs" || eng == "ort_scorer") && !engines_to_run.contains(&eng.as_str()) {
                     engines_to_run.push(eng.as_str());
                 }
             }
             if engines_to_run.is_empty() {
                 if name.to_lowercase().ends_with(".onnx") {
                     engines_to_run.push("ort_scorer");
+                } else if name.to_lowercase().ends_with(".safetensors") || name.to_lowercase().ends_with(".bin") {
+                    engines_to_run.push("mistral_rs");
                 } else {
-                    engines_to_run.push("ik_llama_vanguard");
+                    engines_to_run.push("llama_upstream");
                 }
             }
 
@@ -1516,15 +1490,17 @@ async fn run_mode_profile(
             let candidate_probes = cascade.probe_candidate_engines(m, &tf);
             let mut engines_to_run = Vec::new();
             for (eng, _) in &candidate_probes {
-                if (eng == "ik_llama_vanguard" || eng == "llama_upstream" || eng == "mistral_rs" || eng == "ort_scorer") && !engines_to_run.contains(&eng.as_str()) {
+                if (eng == "llama_upstream" || eng == "mistral_rs" || eng == "ort_scorer") && !engines_to_run.contains(&eng.as_str()) {
                     engines_to_run.push(eng.as_str());
                 }
             }
             if engines_to_run.is_empty() {
                 if name.to_lowercase().ends_with(".onnx") {
                     engines_to_run.push("ort_scorer");
+                } else if name.to_lowercase().ends_with(".safetensors") || name.to_lowercase().ends_with(".bin") {
+                    engines_to_run.push("mistral_rs");
                 } else {
-                    engines_to_run.push("ik_llama_vanguard");
+                    engines_to_run.push("llama_upstream");
                 }
             }
 
@@ -1681,28 +1657,17 @@ async fn run_mode_eval(
         };
 
         for (engine_id, force_cpu) in engines_to_duel {
+            let is_safetensors = model_path_str.to_lowercase().ends_with(".safetensors") || model_path_str.to_lowercase().ends_with(".bin");
             let (engine_selected, engine): (String, std::sync::Arc<dyn EphemeralInferEngine>) = if force_cpu {
-                #[cfg(any(feature = "ik_llama_backend", feature = "llama_backend"))]
-                {
-                    ("llama_cpp4".to_string(), std::sync::Arc::new(LlamaCppEngine))
+                if engine_id == "mistral_rs" || engine_id == "mistral_rs_cpu" || is_safetensors {
+                    ("mistral_rs_cpu".to_string(), std::sync::Arc::new(souls_mc_lib::core::mistral_engine::MistralRsEngine::new_cpu()))
+                } else {
+                    ("llama_upstream_cpu".to_string(), std::sync::Arc::new(souls_mc_lib::core::llama_upstream_engine::LlamaUpstreamEngine::new_cpu()))
                 }
-                #[cfg(not(any(feature = "ik_llama_backend", feature = "llama_backend")))]
-                {
-                    ("llama_cpp4".to_string(), std::sync::Arc::new(MockEphemeralInferEngine))
-                }
-            } else if engine_id == "llama_upstream" {
-                ("llama_upstream".to_string(), std::sync::Arc::new(souls_mc_lib::core::llama_upstream_engine::LlamaUpstreamEngine))
-            } else if engine_id == "mistral_rs" || engine_id == "mistral_rs_sidecar" {
-                ("mistral_rs".to_string(), std::sync::Arc::new(souls_mc_lib::core::mistral_engine::MistralRsEngine))
+            } else if engine_id == "mistral_rs" || engine_id == "mistral_rs_sidecar" || is_safetensors {
+                ("mistral_rs".to_string(), std::sync::Arc::new(souls_mc_lib::core::mistral_engine::MistralRsEngine::new_gpu()))
             } else {
-                #[cfg(any(feature = "ik_llama_backend", feature = "llama_backend"))]
-                {
-                    ("ik_llama_vanguard".to_string(), std::sync::Arc::new(LlamaCppEngine))
-                }
-                #[cfg(not(any(feature = "ik_llama_backend", feature = "llama_backend")))]
-                {
-                    ("ik_llama_vanguard".to_string(), std::sync::Arc::new(MockEphemeralInferEngine))
-                }
+                ("llama_upstream".to_string(), std::sync::Arc::new(souls_mc_lib::core::llama_upstream_engine::LlamaUpstreamEngine::new_gpu()))
             };
 
             if !json_mode {

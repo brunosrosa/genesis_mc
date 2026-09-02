@@ -15,7 +15,7 @@ pub mod pii_redactor; // SOULS-CANIBALIZED Marco I: Aho-Corasick PII redaction (
 pub mod telemetry_dispatcher; // SOULS-CANIBALIZED Marco I: MPSC → SQLite WAL V5 (worker thread dedicada)
 pub mod subprocess_guard; // SOULS-CANIBALIZED Marco I: SubprocessGuard RAII com kill_on_drop
 
-#[cfg(any(feature = "ik_llama_backend", feature = "llama_backend"))]
+#[cfg(feature = "ik_llama_ffi")]
 pub mod llama_engine;
 
 pub mod llama_upstream_engine;

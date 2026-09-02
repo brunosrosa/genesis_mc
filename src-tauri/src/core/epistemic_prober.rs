@@ -122,7 +122,7 @@ impl VerbalizerMap {
     }
 
     /// Resolve os IDs de verbalizadores em runtime a partir do tokenizador real do `LlamaModel`.
-    #[cfg(feature = "llama_backend")]
+    #[cfg(feature = "ik_llama_ffi")]
     pub fn from_llama_model(model: &ik_llama_cpp_2::model::LlamaModel) -> Self {
         let vocab_size = model.n_vocab() as usize;
         let mut risco_neg = Vec::new(); // Unsafe / 1 / true
@@ -937,7 +937,7 @@ mod tests {
     // MARCO 5.2.1 — AUDITORIA FÍSICA E PROVA EPISTÊMICA DE TENSORES EM SILÍCIO
     // =========================================================================
 
-    #[cfg(feature = "llama_backend")]
+    #[cfg(feature = "ik_llama_ffi")]
     fn resolve_physical_gguf_for_test() -> std::path::PathBuf {
         if let Some(p) = crate::core::model_registry::resolve_epistemic_model_path() {
             if p.exists() {
@@ -981,7 +981,7 @@ mod tests {
 
     /// MARCO 5.2.1 — Teste de estresse físico de tensores na CPU (sem dev fallback)
     #[test]
-    #[cfg(feature = "llama_backend")]
+    #[cfg(feature = "ik_llama_ffi")]
     fn test_gemma_physical_tensor_execution() {
         use sysinfo::System;
         use ik_llama_cpp_2::llama_backend::LlamaBackend;
