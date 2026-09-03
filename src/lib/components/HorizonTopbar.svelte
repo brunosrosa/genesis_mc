@@ -27,7 +27,7 @@
   const isHotl = $derived(governanceStore.mode === "HOTL");
 </script>
 
-<header class="h-12 w-full bg-surface-low border-b border-white/10 z-40 flex items-center justify-between px-4 shrink-0 font-mono text-xs select-none">
+<header class="h-11 w-full macos-glass flex items-center justify-between px-4 shrink-0 font-mono text-xs select-none shadow-xl border border-white/[0.12]">
   <!-- Left: Identity & Active Workspace Selector -->
   <div class="flex items-center gap-3">
     <!-- Ghost Avatar / Soul Pip -->

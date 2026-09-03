@@ -87,15 +87,15 @@
     class="fixed inset-0 bg-black/85 backdrop-blur-xs z-50 flex items-start justify-center pt-28 transition-all duration-150 select-none"
     onclick={onClose}
   >
-    <!-- Modal Card -->
+    <!-- Modal Card com acabamento macos-glass estilo Raycast -->
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
-      class="w-full max-w-2xl bg-surface-mid ghost-border-active p-4 shadow-2xl relative"
+      class="w-full max-w-2xl macos-glass p-5 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.85)] border border-white/[0.18] rounded-2xl relative"
       onclick={(e) => e.stopPropagation()}
     >
-      <div class="flex items-center gap-3 border-b border-white/10 pb-3">
-        <svg class="w-5 h-5 text-cyber-purple shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <div class="flex items-center gap-3 border-b border-white/10 pb-3.5">
+        <svg class="w-5 h-5 text-cyan-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="11" cy="11" r="8" />
           <line x1="21" y1="21" x2="16.65" y2="16.65" />
         </svg>

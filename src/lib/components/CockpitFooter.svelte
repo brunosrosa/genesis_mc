@@ -16,7 +16,7 @@
   const vramGb = $derived((telemetry.vram_mb / 1024).toFixed(1));
 </script>
 
-<footer class="h-8 w-full bg-surface-low border-t border-white/10 flex items-center justify-between px-4 font-mono text-[11px] select-none shrink-0 z-40">
+<footer class="h-8 w-full macos-glass-subtle border border-white/[0.10] flex items-center justify-between px-4 font-mono text-[11px] select-none shrink-0 z-40 shadow-lg">
   <div class="flex items-center gap-6">
     <div class="flex items-center gap-2">
       <span class="text-cyber-purple">🧠</span>

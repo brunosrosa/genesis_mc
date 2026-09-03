@@ -21,7 +21,7 @@
 
 <aside 
   id="governor-rail" 
-  class="w-16 h-full bg-surface-low border-r border-white/10 flex flex-col justify-between z-30 shrink-0 overflow-hidden select-none"
+  class="w-16 h-full macos-glass flex flex-col justify-between z-30 shrink-0 overflow-hidden select-none shadow-2xl border border-white/[0.12]"
   aria-label="Governor Rail"
 >
   <!-- Top: Bio-Persona Profile & Focus Rack -->

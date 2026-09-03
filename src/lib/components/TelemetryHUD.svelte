@@ -1,115 +1,77 @@
 <script lang="ts">
-  // SOULS MC — Camada 2: Telemetry HUD (Topbar Superior)
+  // SOULS MC — Camada 3: Telemetry HUD (Mini-Widget de Hardware Flutuante)
   //
-  // Exibe o "eletrocardiograma" de hardware do SODA em tempo real:
-  // - VRAM (Threshold de 6GB / 5000MB da RTX 2060m)
-  // - RAM (Memória do Host)
-  // - CPU Temp / GPU Temp
-  // - FinOps Tokens & Custo Acumulado
-
+  // Mini-card translúcido de canto de tela (macOS Frosted Glass + Cyberpunk):
+  // 1. VRAM (RTX 2060m — Teto rígido de 6.0 GB / Alerta de 5000 MB)
+  // 2. Velocidade de Inferência (Tokens por Segundo)
+  // 3. Termometria de Silício (CPU e GPU Temp)
   import { telemetry, thermal_status } from "$lib/stores/telemetry.svelte.ts";
 
   interface Props {
-    onToggleSpotlight?: () => void;
-    onToggleTerminal?: () => void;
-    isTerminalOpen?: boolean;
+    onOpenDashboard?: () => void;
+    class?: string;
   }
 
-  let { onToggleSpotlight, onToggleTerminal, isTerminalOpen = false }: Props = $props();
+  let { onOpenDashboard, class: customClass = "" }: Props = $props();
 
   const isCritical = $derived(thermal_status() === "PRESSAO_CRITICA");
   const vramPercent = $derived(Math.min(100, Math.round((telemetry.vram_mb / 6000) * 100)));
+  const vramGb = $derived((telemetry.vram_mb / 1024).toFixed(1));
 </script>
 
-<header
-  class="h-14 w-full flex items-center justify-between px-6 bg-[oklch(0.04_0_0_/_85%)] backdrop-blur-xl border-b border-[rgba(255,255,255,0.06)] z-20 select-none"
-  aria-label="Telemetry HUD"
+<!-- svelte-ignore a11y_click_events_have_key_events -->
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div
+  onclick={onOpenDashboard}
+  class="macos-glass p-3 flex flex-col gap-2 select-none cursor-pointer hover:border-cyan-400/40 transition-all duration-200 group {customClass}"
+  title="Clique para abrir o Painel Completo de Telemetria de Hardware"
 >
-  <!-- Left: Core Status ECG & Title -->
-  <div class="flex items-center gap-4">
-    <div class="flex items-center gap-2.5">
+  <!-- Header: LED de Status e Título -->
+  <div class="flex items-center justify-between gap-3 text-[11px] font-sans">
+    <div class="flex items-center gap-2">
       <span
-        class="w-2 h-2 rounded-full transition-colors duration-150 {isCritical ? 'bg-[oklch(0.70_0.18_50)] shadow-[0_0_10px_oklch(0.70_0.18_50)]' : 'bg-[oklch(0.78_0.20_145)] shadow-[0_0_10px_oklch(0.78_0.20_145)]'}"
+        class="w-2 h-2 rounded-full {isCritical ? 'bg-red-500 shadow-[0_0_8px_#ef4444] animate-ping' : 'bg-emerald-400 shadow-[0_0_8px_#34d399]'}"
       ></span>
-      <span class="font-sans font-semibold text-xs tracking-wider text-[oklch(0.95_0_0)] uppercase">
-        SOULS COCKPIT
+      <span class="font-semibold text-white tracking-wide text-xs">SILICON HUD</span>
+    </div>
+    <span class="font-mono text-[9px] text-neutral-400 group-hover:text-cyan-400 transition-colors uppercase">
+      RTX 2060m
+    </span>
+  </div>
+
+  <!-- Vetor 1: VRAM (RTX 2060m - Teto de 6.0 GB) -->
+  <div class="space-y-1">
+    <div class="flex items-center justify-between text-[10.5px] font-mono">
+      <span class="text-neutral-400 uppercase text-[9.5px]">VRAM Usage</span>
+      <span class="font-semibold {isCritical ? 'text-red-400' : 'text-cyan-300'}">
+        {vramGb} <span class="text-neutral-500 font-normal">/ 6.0 GB</span>
       </span>
-      <span class="font-mono text-[10px] px-1.5 py-0.5 rounded bg-[oklch(0.10_0_0)] text-[oklch(0.60_0_0)] border border-[rgba(255,255,255,0.05)]">
-        60 FPS rAF
+    </div>
+    <!-- Barra de VRAM com threshold visual -->
+    <div class="w-full h-1.5 rounded-full bg-white/10 overflow-hidden">
+      <div
+        class="h-full rounded-full transition-all duration-300 {isCritical ? 'bg-red-500 shadow-[0_0_6px_#ef4444]' : 'bg-gradient-to-r from-cyan-500 to-[#007AFF]'}"
+        style="width: {vramPercent}%"
+      ></div>
+    </div>
+  </div>
+
+  <!-- Vetores 2 e 3: Inferência (tok/s) e Térmico (CPU/GPU) -->
+  <div class="grid grid-cols-2 gap-2 pt-1 border-t border-white/[0.08] text-[10px] font-mono">
+    <!-- Throughput de Tokens -->
+    <div class="flex flex-col">
+      <span class="text-[9px] text-neutral-400 uppercase">Throughput</span>
+      <span class="text-white font-semibold flex items-center gap-1">
+        <span class="text-emerald-400">⚡</span> 42.8 <span class="text-[8.5px] text-neutral-400">tok/s</span>
+      </span>
+    </div>
+
+    <!-- Temperatura CPU e GPU -->
+    <div class="flex flex-col text-right">
+      <span class="text-[9px] text-neutral-400 uppercase">Thermals</span>
+      <span class="text-neutral-200 font-semibold">
+        C: <span class="text-white">{telemetry.cpu_temp.toFixed(0)}°</span> | G: <span class="text-white">{telemetry.gpu_temp.toFixed(0)}°</span>
       </span>
     </div>
   </div>
-
-  <!-- Center: Hardware ECG Metrics (VRAM, RAM, CPU, GPU) -->
-  <div class="flex items-center gap-6 font-mono text-xs text-[oklch(0.85_0_0)]">
-    <!-- VRAM with RTX 2060m 6GB limit -->
-    <div class="flex items-center gap-2">
-      <span class="text-[10px] text-[oklch(0.45_0_0)] tracking-widest uppercase">VRAM</span>
-      <div class="flex items-center gap-1.5">
-        <span class="font-medium {isCritical ? 'text-[oklch(0.70_0.18_50)] font-bold' : 'text-[oklch(0.92_0_0)]'}">
-          {telemetry.vram_mb}
-        </span>
-        <span class="text-[10px] text-[oklch(0.45_0_0)]">/ 6000 MB</span>
-      </div>
-      <!-- Mini VRAM gauge bar -->
-      <div class="w-12 h-1.5 rounded-full bg-[oklch(0.12_0_0)] overflow-hidden">
-        <div
-          class="h-full transition-all duration-150 {isCritical ? 'bg-[oklch(0.70_0.18_50)]' : 'bg-[oklch(0.75_0.20_200)]'}"
-          style="width: {vramPercent}%"
-        ></div>
-      </div>
-    </div>
-
-    <!-- RAM -->
-    <div class="flex items-center gap-2">
-      <span class="text-[10px] text-[oklch(0.45_0_0)] tracking-widest uppercase">RAM</span>
-      <span class="text-[oklch(0.92_0_0)] font-medium">{telemetry.ram_mb}</span>
-      <span class="text-[10px] text-[oklch(0.45_0_0)]">MB</span>
-    </div>
-
-    <!-- CPU Temp -->
-    <div class="flex items-center gap-2">
-      <span class="text-[10px] text-[oklch(0.45_0_0)] tracking-widest uppercase">CPU</span>
-      <span class="text-[oklch(0.92_0_0)] font-medium">{telemetry.cpu_temp.toFixed(1)}</span>
-      <span class="text-[10px] text-[oklch(0.45_0_0)]">°C</span>
-    </div>
-
-    <!-- GPU Temp -->
-    <div class="flex items-center gap-2">
-      <span class="text-[10px] text-[oklch(0.45_0_0)] tracking-widest uppercase">GPU</span>
-      <span class="text-[oklch(0.92_0_0)] font-medium">{telemetry.gpu_temp.toFixed(1)}</span>
-      <span class="text-[10px] text-[oklch(0.45_0_0)]">°C</span>
-    </div>
-  </div>
-
-  <!-- Right: Quick Actions (Spotlight Alt+Space & Terminal Drawer) -->
-  <div class="flex items-center gap-3">
-    <!-- Spotlight Quick Trigger -->
-    <button
-      type="button"
-      onclick={onToggleSpotlight}
-      class="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-[oklch(0.08_0_0)] hover:bg-[oklch(0.12_0_0)] text-[oklch(0.70_0_0)] hover:text-[oklch(0.95_0_0)] border border-[rgba(255,255,255,0.08)] transition-all duration-100 ease-[cubic-bezier(0.2,0.8,0.2,1)]"
-      title="Spotlight Zen (Alt+Space)"
-    >
-      <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="11" cy="11" r="8" />
-        <line x1="21" y1="21" x2="16.65" y2="16.65" />
-      </svg>
-      <span class="font-mono text-[11px]">Alt+Space</span>
-    </button>
-
-    <!-- Terminal Drawer Toggle -->
-    <button
-      type="button"
-      onclick={onToggleTerminal}
-      class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg {isTerminalOpen ? 'bg-[oklch(0.14_0_0)] text-[oklch(0.78_0.20_145)] border-[oklch(0.78_0.20_145_/_0.4)]' : 'bg-[oklch(0.08_0_0)] text-[oklch(0.60_0_0)] hover:text-[oklch(0.90_0_0)]'} border border-[rgba(255,255,255,0.08)] transition-all duration-100 ease-[cubic-bezier(0.2,0.8,0.2,1)]"
-      title="Terminal Drawer (Logs & Stdio)"
-    >
-      <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <polyline points="4 17 10 11 4 5" />
-        <line x1="12" y1="19" x2="20" y2="19" />
-      </svg>
-      <span class="font-mono text-[11px]">Logs</span>
-    </button>
-  </div>
-</header>
+</div>
