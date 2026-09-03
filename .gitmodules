@@ -1,3 +1,0 @@
-[submodule "vendor/ik-llama-cpp-sys/ik_llama.cpp"]
-	path = vendor/ik-llama-cpp-sys/ik_llama.cpp
-	url = https://github.com/ikawrakow/ik_llama.cpp.git

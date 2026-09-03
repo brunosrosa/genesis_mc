@@ -81,17 +81,6 @@ foreach ($exe in $targetExes) {
 }
 Write-Host "[GPU-FINOPS] WebView2 e souls_ui_shell ancorados na iGPU (GpuPreference=1; / RTX 2060m 100% blindada para CUDA)" -ForegroundColor DarkGreen
 
-# Patch idempotente vendor/llama-cpp-sys-2 (Evita quebra de sccache + NVCC)
-$vendorLlamaCmake = Join-Path $PSScriptRoot "src-tauri\vendor\llama-cpp-sys-2\llama.cpp\ggml\CMakeLists.txt"
-if (Test-Path $vendorLlamaCmake) {
-    $content = Get-Content -LiteralPath $vendorLlamaCmake -Raw -ErrorAction SilentlyContinue
-    if ($content -and $content -match 'option\(GGML_CCACHE "ggml: use ccache if available"\s+ON\)') {
-        (Get-Content -LiteralPath $vendorLlamaCmake) -replace `
-            'option\(GGML_CCACHE "ggml: use ccache if available"\s+ON\)', 
-            'option(GGML_CCACHE "ggml: use ccache if available"                   OFF)' | Set-Content -LiteralPath $vendorLlamaCmake
-        Write-Host "[PATCH] vendor/llama-cpp-sys-2 GGML_CCACHE -> OFF aplicado com sucesso." -ForegroundColor DarkGreen
-    }
-}
 
 # =============================================================================
 # BLOCO B: QUARENTENA EXPANSA DE PROCESSOS & HIGIENE WEBVIEW2
@@ -122,14 +111,14 @@ foreach ($z in $zombies) {
     }
 }
 
-# Purga de instâncias msedgewebview2 órfãs
-$orphanedWebviews = Get-Process -Name "msedgewebview2" -ErrorAction SilentlyContinue | Where-Object {
-    $_.MainWindowHandle -eq 0 -and ($_.CPU -gt 10 -or $null -eq $_.Parent)
+# Purga de instâncias msedgewebview2 órfãs PERTENCENTES EXCLUSIVAMENTE ao SOULS
+$orphanedWebviews = Get-CimInstance Win32_Process -Filter "Name = 'msedgewebview2.exe'" -ErrorAction SilentlyContinue | Where-Object {
+    $_.CommandLine -match "souls"
 }
 if ($orphanedWebviews) {
     foreach ($wv in $orphanedWebviews) {
-        Stop-Process -Id $wv.Id -Force -ErrorAction SilentlyContinue
-        $killed += [PSCustomObject]@{ Name = "msedgewebview2 (orphan)"; Pids = $wv.Id }
+        Stop-Process -Id $wv.ProcessId -Force -ErrorAction SilentlyContinue
+        $killed += [PSCustomObject]@{ Name = "msedgewebview2 (souls)"; Pids = $wv.ProcessId }
     }
 }
 

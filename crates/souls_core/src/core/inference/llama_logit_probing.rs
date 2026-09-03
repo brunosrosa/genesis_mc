@@ -14,8 +14,7 @@
 //   - `LogitSource::TestFixture` : vetor literal hardcoded para fixtures TDD. APENAS sob `#[cfg(test)]`.
 //                                   NUNCA em runtime de produção.
 
-#[allow(unused_imports)] // Arc é usado apenas sob `feature = "ik_llama_ffi"`
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 use std::time::Instant;
 use tokio::sync::watch;
 use crate::core::inference_adapter::{
@@ -23,15 +22,6 @@ use crate::core::inference_adapter::{
 };
 use crate::souls_thermal_governor::SystemState;
 
-#[cfg(feature = "ik_llama_ffi")]
-use ik_llama_cpp_2::context::LlamaContext;
-
-#[cfg(feature = "ik_llama_ffi")]
-unsafe extern "C" fn silence_llama_logs(
-    _level: ik_llama_cpp_sys::ggml_log_level,
-    _text: *const std::os::raw::c_char,
-    _user_data: *mut std::os::raw::c_void,
-) {}
 /// Tamanho canônico do vocabulário para logit probing epistêmico (AVX2/CPU).
 /// Preservado como SSOT para compatibilidade com o `VerbalizerMap` em `epistemic_prober.rs`.
 pub const MOCK_VOCAB_SIZE: usize = 128;
@@ -47,43 +37,10 @@ const DEFAULT_PROBE_MARKER: &str = "__souls_default_logit_probe_marker__";
 /// SOULS MC Marco IV: `pub` (gated by `#[cfg(feature = "ik_llama_ffi")]`)
 /// to satisfy `private_interfaces` — the `LogitSource::RealLlama` field
 /// inherits the visibility of the parent `pub enum`, and so must its type.
-#[cfg(feature = "ik_llama_ffi")]
-pub struct RealLlamaInner {
-    model_path: std::path::PathBuf,
-    state: RealLlamaState,
-}
-
 // SOULS MC Marco IV: manual `Debug` because the inner `LlamaModel` /
 // `LlamaContext` wrappers don't (and shouldn't) derive it — they own raw FFI
 // pointers. The path is enough for diagnostics; the model/context are redacted.
-#[cfg(feature = "ik_llama_ffi")]
-impl std::fmt::Debug for RealLlamaInner {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("RealLlamaInner")
-            .field("model_path", &self.model_path)
-            .field("state", &"<redacted>")
-            .finish()
-    }
-}
 
-#[cfg(feature = "ik_llama_ffi")]
-enum RealLlamaState {
-    /// Ainda não tentou carregar (tentativa lazy no primeiro `extract_logits`).
-    Init,
-    /// Tentativa de carregamento falhou — fallback permanente para `PromptDerived`.
-    Failed { reason: String },
-    /// Modelo + contexto carregados; pronto para forward pass de 1 token.
-    /// `Box::leak` on both gives `&'static mut`, which is the only sound way
-    /// to hold a `llama_context` alive across threads without violating
-    /// the Rust aliasing rules (the `Mutex<RealLlamaInner>` at the caller
-    /// serializes the mutable access; the leaked `&'static mut` just
-    /// pins the pointer for the lifetime of the program).
-    Ready {
-        #[allow(dead_code)]
-        model: &'static ik_llama_cpp_2::model::LlamaModel,
-        context: &'static mut ik_llama_cpp_2::context::LlamaContext<'static>,
-    },
-}
 
 /// Identifica a origem dos logits consumidos pelo prober.
 ///
@@ -103,15 +60,7 @@ pub enum LogitSource {
     /// os logits brutos via FFI direta. Soft stable softmax (log-sum-exp) projeta
     /// o vocabulário nativo (256k) em `MOCK_VOCAB_SIZE` (128) via max-pooling em bins.
     /// Fail-soft: se o GGUF estiver ausente ou corrompido, cai em `PromptDerived`.
-    #[cfg(feature = "ik_llama_ffi")]
-    RealLlama {
-        // SOULS MC Marco IV: `RealLlamaInner` (defined below) is `pub` so
-        // that this field — which inherits the visibility of the parent
-        // `pub enum LogitSource` — is well-typed. The struct itself is
-        // gated by the same `#[cfg(feature = "ik_llama_ffi")]` so it
-        // cannot leak into non-LLAMA builds.
-        inner: Arc<Mutex<RealLlamaInner>>,
-    },
+
     /// Fixture de teste: vetor literal hardcoded (APENAS sob `#[cfg(test)]`).
     #[cfg(test)]
     TestFixture(Vec<f32>),
@@ -127,21 +76,7 @@ impl LogitSource {
     pub fn extract_logits(&self, prompt: &str) -> Vec<f32> {
         match self {
             LogitSource::PromptDerived => prompt_derived_logits(prompt),
-            #[cfg(feature = "ik_llama_ffi")]
-            LogitSource::RealLlama { inner } => {
-                let mut guard = inner.lock().expect("RealLlama Mutex poisoned");
-                match safe_ffi_call(std::panic::AssertUnwindSafe(|| real_llama_extract_logits(&mut guard, prompt))) {
-                    Ok(Some(logits)) => logits,
-                    Ok(None) => {
-                        tracing::debug!("RealLlama FFI indisponível → fallback PromptDerived");
-                        prompt_derived_logits(prompt)
-                    }
-                    Err(err) => {
-                        tracing::warn!("RealLlama FFI panic capturado: {err} → fallback PromptDerived");
-                        prompt_derived_logits(prompt)
-                    }
-                }
-            }
+
             #[cfg(test)]
             LogitSource::TestFixture(v) => v.clone(),
         }
@@ -213,22 +148,7 @@ impl LlamaLogitProber {
     /// O GGUF é carregado de forma lazy no primeiro `extract_logits` para evitar
     /// custo de boot. Se o modelo não existir ou falhar ao carregar, o caminho
     /// `RealLlama` cai em `PromptDerived` via fail-soft.
-    #[cfg(feature = "ik_llama_ffi")]
-    pub fn with_real_llama(model_path: std::path::PathBuf) -> Self {
-        let initial = prompt_derived_logits(DEFAULT_PROBE_MARKER);
-        let inner = RealLlamaInner {
-            model_path,
-            state: RealLlamaState::Init,
-        };
-        Self {
-            source: LogitSource::RealLlama {
-                inner: Arc::new(Mutex::new(inner)),
-            },
-            last_logits: Mutex::new(initial),
-            n_gpu_layers: 0,
-        }
-    }
-
+    
     /// Constrói um prober com fixture de teste (APENAS `#[cfg(test)]`).
     #[cfg(test)]
     pub fn with_test_fixture(fixture: Vec<f32>) -> Self {
@@ -350,167 +270,6 @@ pub fn calculate_expected_vram_footprint(
 ///
 /// Retorna `None` em qualquer falha (modelo ausente, decode error, FFI null).
 /// O chamador cai em `PromptDerived` via fail-soft.
-#[cfg(feature = "ik_llama_ffi")]
-fn real_llama_extract_logits(
-    inner: &mut RealLlamaInner,
-    prompt: &str,
-) -> Option<Vec<f32>> {
-    use ik_llama_cpp_2::context::params::LlamaContextParams;
-    use ik_llama_cpp_2::llama_backend::LlamaBackend;
-    use ik_llama_cpp_2::llama_batch::LlamaBatch;
-    use ik_llama_cpp_2::model::params::LlamaModelParams;
-    use ik_llama_cpp_2::model::{AddBos, LlamaModel};
-
-    // (1) Lazy init: carrega GGUF na CPU (n_gpu_layers = 0, ADR-027: 0 MB VRAM).
-    if matches!(inner.state, RealLlamaState::Init) {
-        unsafe {
-            ik_llama_cpp_sys::llama_log_set(Some(silence_llama_logs), std::ptr::null_mut());
-        }
-        let backend = match LlamaBackend::init() {
-            Ok(b) => b,
-            Err(e) => {
-                inner.state = RealLlamaState::Failed {
-                    reason: format!("LlamaBackend::init falhou: {e}"),
-                };
-                return None;
-            }
-        };
-        let model_params = LlamaModelParams::default().with_n_gpu_layers(0);
-        let model = match LlamaModel::load_from_file(&backend, &inner.model_path, &model_params) {
-            Ok(m) => m,
-            Err(e) => {
-                inner.state = RealLlamaState::Failed {
-                    reason: format!("load_from_file({:?}) falhou: {e}", inner.model_path),
-                };
-                return None;
-            }
-        };
-        let ctx_params = LlamaContextParams::default()
-            .with_n_ctx(std::num::NonZeroU32::new(512))
-            .with_n_batch(512)
-            .with_type_k(ik_llama_cpp_2::context::params::KvCacheType::F16)
-            .with_type_v(ik_llama_cpp_2::context::params::KvCacheType::F16);
-        // SOULS MC Marco IV — fix for ik-llama-cpp-2 v0.1.7: the model loader
-        // returns a `LlamaModel<'a>` tied to the path's lifetime, and the
-        // context must borrow from the model. To make both `'static` (so the
-        // `Box::leak` below is sound and the borrow checker is happy), we
-        // first leak the model, then build the context from the leaked
-        // `&'static LlamaModel`. This is the same pattern the upstream
-        // `llama-cpp-2` examples use for `once_cell` / `lazy_static` setups.
-        let model_static: &'static LlamaModel = Box::leak(Box::new(model));
-        let context_boxed: Box<LlamaContext<'static>> = match model_static.new_context(&backend, ctx_params) {
-            Ok(c) => Box::new(c),
-            Err(e) => {
-                inner.state = RealLlamaState::Failed {
-                    reason: format!("new_context falhou: {e}"),
-                };
-                return None;
-            }
-        };
-        // SOULS MC Marco IV: `Box::leak` returns `&'static mut T` by design
-        // (the only way to sink a `Box` into a static lifetime). Keeping it
-        // as `&'static mut` at the state layer avoids the `&T → &mut T`
-        // reinterpret-cast UB that the borrow checker denies later.
-        let context: &'static mut LlamaContext<'static> = Box::leak(context_boxed);
-        tracing::info!(
-            "RealLlama FFI carregado: modelo={:?} (TurboQuant K=F16, V=Q4_K, n_ctx=512, AVX2 CPU)",
-            inner.model_path
-        );
-        inner.state = RealLlamaState::Ready {
-            model: model_static,
-            context,
-        };
-    }
-
-    // (2) Despacha pelo estado. `context` is already `&'static mut` in the
-    // state (see `ensure_loaded`); we just re-bind as `&mut` to satisfy
-    // the `decode(&mut batch)` signature. The `Mutex<RealLlamaInner>`
-    // at the caller serializes access, so the aliasing is sound.
-    //
-    // The `&mut RealLlamaInner` we hold (lifetime `'1`) cannot directly
-    // expose `&'static` references borrowed from its fields — the borrow
-    // checker doesn't know the inner pointers outlive `'1`. We know it
-    // (the model and context were `Box::leak`'d to `'static`); so we
-    // re-cast the inner pointers explicitly with `unsafe`. SAFETY: see
-    // the `Box::leak` calls in `ensure_loaded` — both pointers are
-    // guaranteed to live for the program's duration.
-    let (model, context): (&'static ik_llama_cpp_2::model::LlamaModel, &'static mut ik_llama_cpp_2::context::LlamaContext<'static>) = match &mut inner.state {
-        RealLlamaState::Ready { model, context } => {
-            let model: &'static ik_llama_cpp_2::model::LlamaModel =
-                unsafe { &*(*model as *const _) };
-            let context: &'static mut ik_llama_cpp_2::context::LlamaContext<'static> =
-                unsafe { &mut *(*context as *mut _) };
-            (model, context)
-        }
-        RealLlamaState::Failed { reason } => {
-            tracing::trace!(reason = %reason, "RealLlama previously failed → noop");
-            return None;
-        }
-        RealLlamaState::Init => unreachable!("Init deve ser resolvido antes daqui"),
-    };
-
-    // (3) Tokeniza.
-    let tokens = match model.str_to_token(prompt, AddBos::Always) {
-        Ok(t) => t,
-        Err(e) => {
-            tracing::debug!("str_to_token falhou: {e}");
-            return None;
-        }
-    };
-    let n_tokens = tokens.len();
-    if n_tokens == 0 {
-        return None;
-    }
-    let last_idx = (n_tokens - 1) as i32;
-
-    // (4) Batch com logits APENAS no último token (forward pass de 1 token).
-    let mut batch = LlamaBatch::new(n_tokens, 1);
-    for (i, &t) in tokens.iter().enumerate() {
-        let logits_flag = i == n_tokens - 1;
-        if batch.add(t, i as i32, &[0], logits_flag).is_err() {
-            return None;
-        }
-    }
-    if context.decode(&mut batch).is_err() {
-        return None;
-    }
-
-    // (5) FFI real: extrai logits do último token (zero-copy slice).
-    let vocab = model.n_vocab() as usize;
-    let logits_ptr = unsafe {
-        // `ik_llama_cpp_2::sys` re-exporta os bindings de `ik-llama-cpp-sys`
-        // sob a feature `llama_backend` (gated por cfg já em escopo aqui).
-        ik_llama_cpp_2::sys::llama_get_logits_ith(context.as_ptr(), last_idx)
-    };
-    if logits_ptr.is_null() {
-        return None;
-    }
-    let raw_logits: &[f32] = unsafe { std::slice::from_raw_parts(logits_ptr, vocab) };
-
-    // (6) Projeção vocab → MOCK_VOCAB_SIZE via max-pooling em bins.
-    //    Para cada um dos 128 buckets, capturamos o logit máximo do intervalo.
-    let stride = (vocab / MOCK_VOCAB_SIZE).max(1);
-    let mut projected = [f32::NEG_INFINITY; MOCK_VOCAB_SIZE];
-    for (i, chunk) in raw_logits.chunks(stride).take(MOCK_VOCAB_SIZE).enumerate() {
-        projected[i] = chunk.iter().copied().fold(f32::NEG_INFINITY, f32::max);
-    }
-
-    // (7) Softmax estável (log-sum-exp) — preserva ordem de magnitude.
-    let max = projected.iter().copied().fold(f32::NEG_INFINITY, f32::max);
-    let exp_sum: f32 = projected.iter().map(|&x| (x - max).exp()).sum();
-    if !exp_sum.is_finite() || exp_sum <= 0.0 {
-        return None;
-    }
-    let probs: Vec<f32> = projected.iter().map(|&x| ((x - max).exp() / exp_sum).max(f32::MIN)).collect();
-
-    // (8) Renormaliza em log-space para preservar a "forma" do logit original.
-    //    O prober epistêmico consome os logits brutos (não probabilidades), então
-    //    devolvemos log(p) com a constante -max somada de volta (log-sum-exp trick).
-    let log_probs: Vec<f32> = probs.iter().map(|&p| p.ln()).collect();
-
-    Some(log_probs)
-}
-
 /// Computa a Softmax numericamente estável sobre os logits dos tokens "0" e "1",
 /// a Entropia de Shannon H(X), e determina se o disjuntor de incerteza foi ativado (H >= 0.75).
 pub fn compute_binary_shannon_entropy(logit_0: f32, logit_1: f32) -> (f32, f32, f32, bool) {

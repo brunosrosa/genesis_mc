@@ -14,16 +14,77 @@ pub mod security;
 pub mod socratic;
 pub mod governance;
 
+#[allow(ambiguous_glob_reexports)]
 pub use inference::*;
+#[allow(ambiguous_glob_reexports)]
 pub use vram_hardware::*;
+#[allow(ambiguous_glob_reexports)]
 pub use security::*;
+#[allow(ambiguous_glob_reexports)]
 pub use socratic::*;
+#[allow(ambiguous_glob_reexports)]
 pub use governance::*;
 
 // Aliases de compatibilidade retroativa
 pub use inference::burn_engine as burn_agnostic;
 pub use inference::llama_logit_probing as llama_cpp4_logit;
 pub use inference::pulp_matrix_engine as pulp_lele;
+
+pub mod llama_engine {
+    pub use crate::core::inference::llama_upstream_engine::LlamaUpstreamEngine as LlamaCppEngine;
+
+    pub fn disable_model_in_sqlite(model_path: &str) {
+        let root = crate::core::workspace_root();
+        let db_path = root.join(".souls_data").join("models.sqlite");
+        if !db_path.exists() {
+            tracing::warn!(
+                target: "souls_mcp::llama_engine",
+                "disable_model_in_sqlite: banco não encontrado em '{}'",
+                db_path.display()
+            );
+            return;
+        }
+        let conn = match rusqlite::Connection::open(&db_path) {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::error!(
+                    target: "souls_mcp::llama_engine",
+                    "disable_model_in_sqlite: falha ao abrir SQLite: {e}"
+                );
+                return;
+            }
+        };
+        let _ = conn.busy_timeout(std::time::Duration::from_millis(5000));
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        match conn.execute(
+            "UPDATE model_registry SET is_active = 0, deactivated_at = ?2, deactivation_reason = 'ffi_crash'
+             WHERE (file_path = ?1 OR model_id = ?1) AND is_active != 0",
+            rusqlite::params![model_path, now],
+        ) {
+            Ok(0) => {
+                tracing::info!(
+                    target: "souls_mcp::llama_engine",
+                    "disable_model_in_sqlite: modelo '{model_path}' ja estava desativado ou nao existe no catalogo"
+                );
+            }
+            Ok(updated) => {
+                tracing::warn!(
+                    target: "souls_mcp::llama_engine",
+                    "MARCO III: modelo '{model_path}' DESATIVADO no catalogo apos crash FFI ({updated} rows)"
+                );
+            }
+            Err(e) => {
+                tracing::error!(
+                    target: "souls_mcp::llama_engine",
+                    "disable_model_in_sqlite: falha ao desativar '{model_path}': {e}"
+                );
+            }
+        }
+    }
+}
 
 use std::path::PathBuf;
 

@@ -2,16 +2,8 @@ pub mod engine_trait;
 pub mod inference_adapter;
 pub mod model_registry;
 pub mod model_manager;
-
-#[cfg(feature = "ik_llama_ffi")]
-pub mod llama_engine;
-
 pub mod llama_upstream_engine;
 pub mod llama_logit_probing;
-
-#[cfg(feature = "lora_adapter")]
-pub mod llama_lora_adapter;
-
 pub mod mistral_engine;
 pub mod mistral_sidecar;
 pub mod bitnet_engine;
@@ -27,16 +19,9 @@ pub use engine_trait::*;
 pub use inference_adapter::*;
 pub use model_registry::*;
 pub use model_manager::*;
-
-#[cfg(feature = "ik_llama_ffi")]
-pub use llama_engine::*;
-
 pub use llama_upstream_engine::*;
+pub use llama_upstream_engine::LlamaUpstreamEngine as LlamaCppEngine;
 pub use llama_logit_probing::*;
-
-#[cfg(feature = "lora_adapter")]
-pub use llama_lora_adapter::*;
-
 pub use mistral_engine::*;
 pub use mistral_sidecar::*;
 pub use bitnet_engine::*;

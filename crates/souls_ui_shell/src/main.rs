@@ -93,14 +93,65 @@ impl ApplicationHandler for SoulsApp {
         let ipc_bridge = IpcBridge::new(engine_arc);
         let ipc_proxy = proxy.clone();
 
-        let dev_url = std::env::var("SOULS_DEV_URL").unwrap_or_else(|_| "http://localhost:1420".to_string());
-
         let mut builder = WebViewBuilder::new()
             .with_transparent(true)
-            .with_url(&dev_url)
             .with_ipc_handler(move |msg| {
                 ipc_bridge.handle_incoming(&msg.body(), &ipc_proxy);
             });
+
+        if let Ok(dev_url) = std::env::var("SOULS_DEV_URL") {
+            tracing::info!("Modo Dev: Carregando frontend a partir de {}", dev_url);
+            builder = builder.with_url(&dev_url);
+        } else {
+            let dist_dir = resolve_dist_dir();
+            tracing::info!("Modo Standalone: Servindo assets locais a partir de {}", dist_dir.display());
+            let dist_dir_clone = dist_dir.clone();
+            builder = builder
+                .with_custom_protocol("souls".into(), move |_id, request| {
+                    let path = request.uri().path();
+                    let clean_path = if path == "/" || path.is_empty() {
+                        "index.html"
+                    } else {
+                        path.trim_start_matches('/')
+                    };
+                    let file_path = dist_dir_clone.join(clean_path);
+                    let (mime, content): (&'static str, Vec<u8>) = if file_path.exists() && file_path.is_file() {
+                        let ext = file_path.extension().and_then(|s| s.to_str()).unwrap_or("");
+                        let mime = match ext {
+                            "html" => "text/html; charset=utf-8",
+                            "css" => "text/css; charset=utf-8",
+                            "js" => "application/javascript; charset=utf-8",
+                            "svg" => "image/svg+xml",
+                            "png" => "image/png",
+                            "jpg" | "jpeg" => "image/jpeg",
+                            "ico" => "image/x-icon",
+                            "woff2" => "font/woff2",
+                            "woff" => "font/woff",
+                            "ttf" => "font/ttf",
+                            "json" => "application/json; charset=utf-8",
+                            _ => "application/octet-stream",
+                        };
+                        (mime, std::fs::read(&file_path).unwrap_or_default())
+                    } else {
+                        let fallback = dist_dir_clone.join("index.html");
+                        ("text/html; charset=utf-8", std::fs::read(&fallback).unwrap_or_default())
+                    };
+
+                    wry::http::Response::builder()
+                        .status(wry::http::StatusCode::OK)
+                        .header(wry::http::header::CONTENT_TYPE, mime)
+                        .header(wry::http::header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
+                        .body(std::borrow::Cow::Owned(content))
+                        .unwrap_or_else(|_| {
+                            let empty: &'static [u8] = &[];
+                            wry::http::Response::builder()
+                                .status(wry::http::StatusCode::INTERNAL_SERVER_ERROR)
+                                .body(std::borrow::Cow::Borrowed(empty))
+                                .unwrap()
+                        })
+                })
+                .with_url("http://souls.localhost/index.html");
+        }
 
         // Configuração de argumentos para GPU integrada de baixo consumo
         #[cfg(target_os = "windows")]
@@ -230,4 +281,28 @@ fn main() {
 
     let mut app = SoulsApp::new();
     let _ = event_loop.run_app(&mut app);
+}
+
+fn resolve_dist_dir() -> std::path::PathBuf {
+    // 1. Tenta a partir do CWD atual (ex: raiz do workspace)
+    if let Ok(cwd) = std::env::current_dir() {
+        let p = cwd.join("dist");
+        if p.join("index.html").exists() {
+            return p;
+        }
+    }
+
+    // 2. Tenta a partir da árvore de diretórios do executável atual
+    if let Ok(exe) = std::env::current_exe() {
+        let mut cur = exe.parent();
+        while let Some(dir) = cur {
+            let candidate = dir.join("dist");
+            if candidate.join("index.html").exists() {
+                return candidate;
+            }
+            cur = dir.parent();
+        }
+    }
+
+    std::path::PathBuf::from("dist")
 }

@@ -85,11 +85,8 @@ llama_upstream_backend = []
 mistral_backend = ["dep:mistralrs"]
 all_engines = ["llama_upstream_backend", "mistral_backend"]
 llama_backend = ["llama_upstream_backend"]
-ik_llama_backend = ["llama_upstream_backend"]
 grammar_backend = []
 gateway_ccr = []
-lora_adapter = []
-ik_llama_ffi = []
 
 [[bin]]
 name = "souls_mcp_server"

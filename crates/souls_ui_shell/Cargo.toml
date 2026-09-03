@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2021"
 description = "Chassi gráfico nativo bare-metal para Windows 11 com DWM Acrylic, Wry e Winit"
 
+[lints]
+workspace = true
+
 [dependencies]
 souls_mc_lib = { package = "souls_core", path = "../souls_core" }
 souls_protocol = { path = "../souls_protocol" }
