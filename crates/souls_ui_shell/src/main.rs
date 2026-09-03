@@ -5,8 +5,9 @@ use std::sync::Arc;
 use souls_mc_lib::CoreEngine;
 use souls_protocol::IpcEnvelope;
 use souls_ui_shell::{
-    apply_native_dwm_acrylic, auto_deactivate_caps_lock, register_global_hotkey,
-    unregister_global_hotkey, ComApartmentGuard, IpcBridge, SuspensionController, WebViewProxy,
+    add_tray_icon, apply_native_dwm_acrylic, auto_deactivate_caps_lock, register_global_hotkey,
+    remove_tray_icon, unregister_global_hotkey, ComApartmentGuard, IpcBridge, SuspensionController,
+    WebViewProxy,
 };
 use tokio::sync::mpsc;
 use winit::application::ApplicationHandler;
@@ -45,12 +46,20 @@ impl ApplicationHandler for SoulsApp {
             return;
         }
 
-        // 1. Criar a janela do Winit
+        let primary_monitor = event_loop.primary_monitor().or_else(|| event_loop.available_monitors().next());
+        let (screen_w, screen_h) = if let Some(ref m) = primary_monitor {
+            let s = m.size();
+            (s.width, s.height)
+        } else {
+            (1920, 1080)
+        };
+
+        // 1. Criar a janela do Winit cobrindo a tela do monitor em modo Overlay Transparente
         let window_attributes = Window::default_attributes()
             .with_title("SOULS MC // SODA MISSION CONTROL (BARE-METAL)")
             .with_transparent(true)
             .with_decorations(false)
-            .with_inner_size(winit::dpi::LogicalSize::new(1280.0, 800.0))
+            .with_inner_size(winit::dpi::PhysicalSize::new(screen_w, screen_h))
             .with_visible(false);
 
         let window = match event_loop.create_window(window_attributes) {
@@ -61,7 +70,7 @@ impl ApplicationHandler for SoulsApp {
             }
         };
 
-        // 2. Extrair HWND e aplicar composição DWM Acrylic nativa
+        // 2. Extrair HWND e aplicar composição DWM Acrylic nativa, Atalho Global e Systray
         #[cfg(target_os = "windows")]
         {
             use raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -71,6 +80,7 @@ impl ApplicationHandler for SoulsApp {
                     unsafe {
                         let _ = apply_native_dwm_acrylic(hwnd);
                         register_global_hotkey(hwnd);
+                        add_tray_icon(hwnd);
                     }
                 }
             }
@@ -96,7 +106,7 @@ impl ApplicationHandler for SoulsApp {
         let mut builder = WebViewBuilder::new()
             .with_transparent(true)
             .with_ipc_handler(move |msg| {
-                ipc_bridge.handle_incoming(&msg.body(), &ipc_proxy);
+                ipc_bridge.handle_incoming(msg.body(), &ipc_proxy);
             });
 
         if let Ok(dev_url) = std::env::var("SOULS_DEV_URL") {
@@ -242,6 +252,7 @@ impl ApplicationHandler for SoulsApp {
                     if let RawWindowHandle::Win32(win32_handle) = handle.as_raw() {
                         let hwnd = win32_handle.hwnd.get() as windows_sys::Win32::Foundation::HWND;
                         unsafe {
+                            remove_tray_icon(hwnd);
                             unregister_global_hotkey(hwnd);
                         }
                     }

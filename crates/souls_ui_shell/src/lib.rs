@@ -6,8 +6,10 @@ pub mod dwm;
 pub mod hotkey;
 pub mod ipc;
 pub mod suspend;
+pub mod tray;
 
 pub use dwm::apply_native_dwm_acrylic;
 pub use hotkey::{auto_deactivate_caps_lock, register_global_hotkey, unregister_global_hotkey};
 pub use ipc::{IpcBridge, WebViewProxy};
 pub use suspend::{ComApartmentGuard, SuspensionController};
+pub use tray::{add_tray_icon, remove_tray_icon, WM_SOULS_TRAY};

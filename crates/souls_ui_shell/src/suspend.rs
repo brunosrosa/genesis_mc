@@ -49,6 +49,12 @@ pub struct SuspensionController {
     is_suspended: bool,
 }
 
+impl Default for SuspensionController {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SuspensionController {
     pub fn new() -> Self {
         Self { is_suspended: false }

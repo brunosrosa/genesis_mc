@@ -14,12 +14,15 @@ use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
 pub const SOULS_HOTKEY_ID: i32 = 0x50DA;
 
 /// Registra o atalho global Shift + Caps Lock na HWND especificada
+///
+/// # Safety
+/// O chamador deve garantir que `hwnd` seja um HWND Win32 válido.
 #[cfg(target_os = "windows")]
 pub unsafe fn register_global_hotkey(hwnd: HWND) -> bool {
     let success = RegisterHotKey(
         hwnd,
         SOULS_HOTKEY_ID,
-        (MOD_SHIFT | MOD_NOREPEAT) as u32,
+        MOD_SHIFT | MOD_NOREPEAT,
         VK_CAPITAL as u32,
     );
 
@@ -28,7 +31,7 @@ pub unsafe fn register_global_hotkey(hwnd: HWND) -> bool {
         true
     } else {
         // Fallback: tentar sem MOD_NOREPEAT caso o Windows recuse
-        let fallback = RegisterHotKey(hwnd, SOULS_HOTKEY_ID, MOD_SHIFT as u32, VK_CAPITAL as u32);
+        let fallback = RegisterHotKey(hwnd, SOULS_HOTKEY_ID, MOD_SHIFT, VK_CAPITAL as u32);
         if fallback != 0 {
             tracing::info!("[souls_ui_shell::hotkey] Atalho Global Shift+CapsLock registrado via fallback");
             true
@@ -40,12 +43,18 @@ pub unsafe fn register_global_hotkey(hwnd: HWND) -> bool {
 }
 
 /// Desregistra o atalho global ao encerrar a aplicação
+///
+/// # Safety
+/// O chamador deve garantir que `hwnd` seja um HWND Win32 válido.
 #[cfg(target_os = "windows")]
 pub unsafe fn unregister_global_hotkey(hwnd: HWND) {
     let _ = UnregisterHotKey(hwnd, SOULS_HOTKEY_ID);
 }
 
 /// Inspeciona o estado do Caps Lock e o desativa atomicamente se estiver ligado
+///
+/// # Safety
+/// O chamador deve invocar a partir de um contexto onde chamadas nativas de input Win32 são seguras.
 #[cfg(target_os = "windows")]
 pub unsafe fn auto_deactivate_caps_lock() {
     let state = GetKeyState(VK_CAPITAL as i32);

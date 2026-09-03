@@ -43,6 +43,10 @@ pub const DWMSBT_TABBEDWINDOW: u32 = 4;
 pub const DWMSBT_MAINWINDOW: u32 = 2;
 
 /// Aplica o material Desktop Acrylic nativo do Windows 11 no HWND da janela
+///
+/// # Safety
+/// O chamador deve garantir que `hwnd` seja um manipulador de janela Win32 válido
+/// com suporte à composição DWM.
 #[cfg(target_os = "windows")]
 pub unsafe fn apply_native_dwm_acrylic(hwnd: HWND) -> Result<(), String> {
     if hwnd.is_null() {
@@ -85,6 +89,9 @@ pub unsafe fn apply_native_dwm_acrylic(hwnd: HWND) -> Result<(), String> {
 }
 
 /// Alterna dinamicamente a transparência a cliques (Click-Through)
+///
+/// # Safety
+/// O chamador deve garantir que `hwnd` seja um HWND Win32 válido.
 #[cfg(target_os = "windows")]
 pub unsafe fn set_click_through(hwnd: HWND, passthrough: bool) {
     if hwnd.is_null() {
